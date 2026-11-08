@@ -1,0 +1,42 @@
+# The iPhone shortcut from docs/AIRPLAY.md, signed on a GitHub Mac so an iPhone will import it.
+# The file has no addresses in it: the iPhone asks for the bridge's address when it is added.
+name: airplay shortcut
+
+on:
+  push:
+    paths:
+      - "scripts/make-airplay-shortcut.py"
+      - ".github/workflows/shortcut.yml"
+  workflow_dispatch:
+
+jobs:
+  sign:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find the Shortcuts action names on this Mac
+        run: |
+          sw_vers
+          for f in $(find /System/Library/PrivateFrameworks -maxdepth 1 \( -name "WorkflowKit.framework" -o -name "ActionKit.framework" -o -name "VoiceShortcuts*.framework" -o -name "Workflow*.framework" \) 2>/dev/null); do
+            grep -rhoa "is\.workflow\.actions\.[A-Za-z0-9._]*" "$f" 2>/dev/null
+          done | sort -u > ids.txt || true
+          wc -l ids.txt
+          grep -iE "playback|airplay|route|openapp|downloadurl|getdevicedetails|showresult|conditional|gettext" ids.txt || true
+          PB=$(grep -iE "playbackdestination|setplaybackdestination" ids.txt | head -1)
+          echo "PLAYBACK_ID=${PB:-is.workflow.actions.setplaybackdestination}" >> "$GITHUB_ENV"
+
+      - name: Make and sign the shortcut
+        run: |
+          echo "playback action: $PLAYBACK_ID"
+          python3 scripts/make-airplay-shortcut.py --playback-id "$PLAYBACK_ID" --out unsigned.shortcut
+          mkdir -p out
+          shortcuts sign --mode anyone --input unsigned.shortcut --output "out/F1 on TV.shortcut"
+          ls -l out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: f1-on-tv-shortcut
+          path: out/
+          retention-days: 3
