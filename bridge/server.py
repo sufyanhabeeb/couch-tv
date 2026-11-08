@@ -875,7 +875,7 @@ async def h_volume(request):
 
 
 # ---------- the watch: one endpoint for Apple Shortcuts (docs/WATCH.md) ----------
-# POST /api/watch {"do": "Volume up"} (any case, spaces and punctuation ignored), or
+# POST /api/watch {"do": "Volume up"} or {"do": "Volume 25"} (any case, spaces and punctuation ignored), or
 # {"do": "ask", "text": "..."}. Answers in a few words of plain text, for the watch's screen.
 WATCH_KEYS = {"play": "play", "pause": "pause", "playpause": "play_pause", "back": "back",
               "ok": "ok", "select": "ok", "home": "home", "up": "up", "down": "down",
@@ -894,8 +894,25 @@ async def h_watch(request):
     say = "Done"
     try:
         data = await body(request)
-        do = re.sub(r"[^a-z]", "", str(data.get("do") or "").lower())
-        if do in ("volumeup", "louder", "up3"):
+        do = re.sub(r"[^a-z0-9]", "", str(data.get("do") or "").lower())
+        level = re.fullmatch(r"(?:volume|vol)?(\d{1,3})", do)
+        if level:
+            # "Volume 25" or just "25": straight to that level (the crown list in docs/WATCH.md)
+            tv.require()
+            vol = tv.volume
+            if not vol["known"]:
+                return web.Response(status=409, text="This TV doesn't report its volume", content_type="text/plain")
+            want = round(max(0, min(100, int(level.group(1)))) * vol["max"] / 100)
+            if hasattr(tv, "set_volume"):
+                await tv.set_volume(want)
+            else:
+                diff = want - (vol["level"] or 0)
+                for _ in range(min(abs(diff), 50)):
+                    await tv.key("volume_up" if diff > 0 else "volume_down")
+                    await asyncio.sleep(0.08)
+                await asyncio.sleep(0.4)
+            say = _watch_said(tv.volume)
+        elif do in ("volumeup", "louder", "up3"):
             tv.require()
             for _ in range(WATCH_VOL_STEPS):
                 await tv.key("volume_up")

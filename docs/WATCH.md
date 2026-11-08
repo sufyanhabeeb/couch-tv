@@ -30,6 +30,23 @@ On the watch, open it and tap a button. The list comes back after each tap, so y
 Volume up three times in a row. Each Volume up or Volume down is 3 steps. Press the crown or swipe back
 to close it.
 
+## 1b. "TV Volume": turn the crown
+
+Turning the Digital Crown scrolls a Shortcuts list, so a list of volume levels gives you crown
+control: turn to the level, tap it, and the TV goes straight there.
+
+New shortcut, named **TV Volume**:
+
+1. **List**, one level per line: `0`, `4`, `6`, `8`, `10`, `12`, `14`, `16`, `18`, `20`, `22`,
+   `25`, `30`, `35`, `40`. (Pick the levels you actually use. Most rooms live between 8 and 25.)
+2. **Repeat**, 50 times, with the next two inside it.
+3. **Choose from List**, from that List. Prompt: `Volume`.
+4. **Get Contents of URL**, `<bridge>/api/watch`, **POST**, Request Body **JSON**, Text field `do`
+   with the **Chosen Item** variable.
+
+**Show on Apple Watch** on. Open it, turn the crown, tap a level, and the list comes back for the next change.
+Close it with the crown press or swipe back. Siri works too: "Hey Siri, TV Volume".
+
 ## 2. "Ask the TV": talk to the Claude assistant
 
 New shortcut, named **Ask the TV**:
@@ -67,6 +84,7 @@ words of plain text (`Volume 14`, `Paused`, `TV on`), or Claude's reply.
 | `do` | What it does |
 | --- | --- |
 | `Volume up`, `Volume down` | 3 steps louder or quieter |
+| `Volume 20`, or just `20` | Straight to that level (0 to 100) |
 | `Mute` | Mute on or off |
 | `Play`, `Pause`, `Play pause`, `Stop`, `Rewind`, `Forward` | Playback keys (LG has no play/pause toggle: use Play and Pause) |
 | `Back`, `OK`, `Home`, `Up`, `Down`, `Left`, `Right` | Remote keys |
