@@ -15,6 +15,8 @@
 <video class="bgvid" id="bgvid" muted loop playsinline preload="none" aria-hidden="true"></video>
 <div class="scenes" id="scenes" aria-hidden="true"></div>
 <div class="scrim" aria-hidden="true"></div>
+<!-- the colour wash of whoever is watching (html.look-<theme>, people[].theme in config.json) -->
+<div class="tint" aria-hidden="true"></div>
 
 <header class="top">
   <div class="top-left">
@@ -45,9 +47,16 @@
   <section class="shelf" id="shelf-section" aria-labelledby="shelf-title">
     <header class="shelf-head">
       <h2 id="shelf-title">Keep watching</h2>
+      <span class="shelf-count" id="shelf-count"></span>
       <p class="status" id="status"></p>
     </header>
     <div class="shelf-track" id="shelf"></div>
+  </section>
+
+  <section class="news" id="news" aria-label="Headlines">
+    <span class="news-src" id="news-src"></span>
+    <span class="news-title" id="news-title"></span>
+    <i class="news-bar" id="news-bar"></i>
   </section>
 
   <section class="apps" id="apps-section" aria-label="Apps">

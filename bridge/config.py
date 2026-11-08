@@ -128,6 +128,9 @@ def clean_people(items):
         item = {"id": pid, "name": name}
         if isinstance(p.get("colour"), str) and re.fullmatch(r"#[0-9a-fA-F]{3,8}", p["colour"]):
             item["colour"] = p["colour"]
+        # The TV home's look for this person (tv-home/web/app.css, .look-<theme>).
+        if isinstance(p.get("theme"), str) and re.fullmatch(r"[a-z]{1,20}", p["theme"]):
+            item["theme"] = p["theme"]
         # Kids and guests are left out of the household's taste (what "everyone" picks are based on).
         for flag in ("kid", "guest"):
             if p.get(flag) is True:

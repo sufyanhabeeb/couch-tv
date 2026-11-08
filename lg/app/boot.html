@@ -34,9 +34,12 @@
   }
 
   function store(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
+  // The TV's own list gives icons as file paths, which this app may not read (webOS 4 shows text
+  // tiles). The bridge's list has the same icons as http:// addresses on the TV, so those win.
+  var tvList = null, httpIcons = {};
   function keepApps(list) {
     store("couch.webos.apps", JSON.stringify(list.map(function (a) {
-      return { id: a.id, title: a.title, icon: a.icon || a.largeIcon || null };
+      return { id: a.id, title: a.title, icon: httpIcons[a.id] || a.largeIcon || a.icon || null };
     })));
   }
 
@@ -50,7 +53,7 @@
     b.onservicecallback = function (msg) {
       var r = null;
       try { r = JSON.parse(msg); } catch (e) {}
-      if (r && r.returnValue && r.launchPoints && r.launchPoints.length) { keepApps(r.launchPoints); appsFromTv = true; }
+      if (r && r.returnValue && r.launchPoints && r.launchPoints.length) { tvList = r.launchPoints; keepApps(tvList); appsFromTv = true; }
       appsDone = true; next();
     };
     b.call("luna://com.webos.applicationManager/listLaunchPoints", "{}");
@@ -76,7 +79,9 @@
     y.onload = function () {
       var list = null;
       try { list = JSON.parse(y.responseText).apps; } catch (e) {}
-      if (!appsFromTv && list && list.length) keepApps(list);
+      if (!list || !list.length) return;
+      list.forEach(function (a) { if (a.icon && /^https?:/.test(a.icon)) httpIcons[a.id] = a.icon; });
+      keepApps(appsFromTv && tvList ? tvList : list);
     };
     y.send();
   }

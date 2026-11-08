@@ -710,7 +710,7 @@ async def h_people_set(request):
             raise ApiError(400, "every person needs a name")
     # The phone only edits names and order: keep each person's kid and guest marks from config.
     old = {p["id"]: p for p in config.PEOPLE}
-    people = [{**{k: old[i["id"]][k] for k in ("kid", "guest") if k in old.get(i.get("id"), {})}, **i}
+    people = [{**{k: old[i["id"]][k] for k in ("kid", "guest", "theme", "colour") if k in old.get(i.get("id"), {})}, **i}
               if isinstance(i, dict) and i.get("id") in old else i for i in people]
     config.set_people(people)
     if store.current_who() not in (None, "both", *config.PEOPLE_IDS):
@@ -844,10 +844,13 @@ async def h_volume(request):
             raise ApiError(409, "this TV does not report a volume level, use up and down")
         target = max(0, min(100, int(data["level"])))
         want = round(target * vol["max"] / 100)
-        diff = want - (vol["level"] or 0)
-        for _ in range(min(abs(diff), 50)):
-            await tv.key("volume_up" if diff > 0 else "volume_down")
-            await asyncio.sleep(0.08)
+        if hasattr(tv, "set_volume"):   # LG: straight to the level, no key presses
+            await tv.set_volume(want)
+        else:
+            diff = want - (vol["level"] or 0)
+            for _ in range(min(abs(diff), 50)):
+                await tv.key("volume_up" if diff > 0 else "volume_down")
+                await asyncio.sleep(0.08)
     else:
         action = data.get("action")
         keys = {"up": "volume_up", "down": "volume_down", "mute": "mute"}
@@ -1075,6 +1078,208 @@ async def h_weather(request):
     if not w:
         raise ApiError(503, "No weather right now.")
     return ok(**w)
+
+
+# ---------- headlines for the TV home ----------
+# "news": {"feeds": [{"name": "NYT", "url": "https://...rss"}]} in config.json; "news": false turns it off.
+# Read every 15 minutes, newest few of each feed, taken in turns so no one source fills the card.
+NEWS_DEFAULT = [
+    {"name": "NYT", "url": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"},
+    {"name": "BBC", "url": "https://feeds.bbci.co.uk/news/world/rss.xml"},
+]
+_news_cfg = config.CONFIG.get("news", True)
+NEWS_FEEDS = [] if _news_cfg is False else (
+    (_news_cfg.get("feeds") if isinstance(_news_cfg, dict) else None) or NEWS_DEFAULT)
+# Extra feeds for one person only: "news": {"people": {"alex": [{"name": "F1", "url": ...}]}}
+NEWS_PEOPLE = (_news_cfg.get("people") if isinstance(_news_cfg, dict) else None) or {}
+NEWS_EVERY = 15 * 60
+NEWS_PER_FEED = 8
+news_cache = {}   # feed url -> {"at": time, "items": [...]}
+
+# "Both" watching: little notes for the two of them instead of the headlines.
+COUPLE_NOTES = [
+    ("Date night", "Popcorn, a blanket and one rule tonight: no phones till the credits roll"),
+    ("Date night", "Cook something new together tonight, then pick a film to eat it in front of"),
+    ("Date night", "Living-room picnic: lay a blanket on the floor and eat dinner down there"),
+    ("Date night", "Pick a country, order its food, watch a film set there"),
+    ("Date night", "Dessert first tonight. Nobody has to know"),
+    ("Date night", "Take turns: one of you picks the film, the other picks the snacks"),
+    ("Date night", "Evening walk along the Corniche, then a show when you get home"),
+    ("Date night", "Karak and a sunset somewhere new this weekend"),
+    ("Little reminder", "Say thank you for one small thing they did today"),
+    ("Little reminder", "Ask about the best part of their day, and really listen"),
+    ("Little reminder", "A long hug beats a long message"),
+    ("Little reminder", "Plan the next trip together, even if it is just a day out"),
+    ("Little reminder", "Leave a note somewhere they will find it tomorrow"),
+    ("Little reminder", "Put the phones in another room for the next hour"),
+    ("Little reminder", "Compliment something they would never expect you to notice"),
+    ("Little reminder", "Look through old photos together tonight"),
+    ("For you two", "Home is wherever the two of you are on this couch"),
+    ("For you two", "The best seat in the house is the one next to each other"),
+    ("For you two", "Every love story is beautiful, but yours is the favourite"),
+    ("For you two", "Two people, one blanket, endless episodes"),
+    ("For you two", "Love is sharing the last slice without being asked"),
+    ("For you two", "Still choosing each other, every single day"),
+    ("For you two", "Partners in crime, and in picking what to watch"),
+    ("For you two", "The little moments are the big ones"),
+    ("Question for tonight", "What is one thing you have always wanted to do together?"),
+    ("Question for tonight", "Which memory of us makes you smile the most?"),
+    ("Question for tonight", "If we could live anywhere for a year, where would it be?"),
+    ("Question for tonight", "What song reminds you of us?"),
+    ("Question for tonight", "What was your first impression of me, honestly?"),
+    ("Question for tonight", "What is the next adventure we should plan?"),
+]
+
+
+def couple_notes():
+    import random
+    items = [{"title": t, "source": s} for s, t in COUPLE_NOTES]
+    random.Random(time.strftime("%Y-%m-%d")).shuffle(items)   # a new order each day
+    return items
+
+
+def _rss_titles(xml_text, limit):
+    import html
+    import xml.etree.ElementTree as ET
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
+    out = []
+    # RSS <item><title>, or Atom <entry><title>
+    for it in root.iter():
+        if it.tag.rsplit("}", 1)[-1] not in ("item", "entry"):
+            continue
+        title = next((c.text for c in it if c.tag.rsplit("}", 1)[-1] == "title" and c.text), None)
+        if title:
+            out.append(" ".join(html.unescape(title).split())[:160])
+        if len(out) >= limit:
+            break
+    return out
+
+
+async def get_news(who=None):
+    import aiohttp
+    feeds = [f for f in NEWS_FEEDS + list(NEWS_PEOPLE.get(who) or []) if f.get("url")]
+
+    async def one(s, feed):
+        c = news_cache.get(feed["url"])
+        if c and time.time() - c["at"] < NEWS_EVERY:
+            return c["items"]
+        try:
+            async with s.get(feed["url"], headers={"User-Agent": "Mozilla/5.0 (couch-tv bridge)"}) as r:
+                text = await r.text(errors="replace")
+            items = [{"title": t, "source": feed.get("name") or ""} for t in _rss_titles(text, NEWS_PER_FEED)]
+            if items:
+                news_cache[feed["url"]] = {"at": time.time(), "items": items}
+            return items
+        except Exception as e:  # one bad feed never blanks the others; keep its last good read
+            log.info("news %s: %s", feed.get("name"), e)
+            return c["items"] if c else []
+
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as s:
+        lists = await asyncio.gather(*(one(s, f) for f in feeds))
+    # the person's own feeds go first in each round, so theirs come up often
+    lists = lists[len(NEWS_FEEDS):] + lists[:len(NEWS_FEEDS)]
+    return [lst[i] for i in range(max((len(x) for x in lists), default=0)) for lst in lists if i < len(lst)]
+
+
+async def h_news(request):
+    who = request.query.get("who") or None
+    if who == "both":
+        return ok(items=couple_notes(), kind="couple")
+    if not NEWS_FEEDS and not NEWS_PEOPLE.get(who):
+        return ok(items=[])
+    return ok(items=await get_news(who), kind="news")
+
+
+# ---------- trending: this week's most popular shows and films where they stream (JustWatch) ----------
+# For "both" it is romance and romantic comedy. Only titles on a subscription app couch-tv knows
+# (apps.py "jw"); the TV keeps the ones whose app it has.
+TRENDING_EVERY = 6 * 3600
+trending_cache = {}   # kind -> {"at": time, "items": [...]}
+_TRENDING_Q = """query($country: Country!, $first: Int!, $filter: TitleFilter) {
+  popularTitles(country: $country, first: $first, sortBy: TRENDING, filter: $filter) {
+    edges { node { objectType
+      content(country: $country, language: "en") { title originalReleaseYear shortDescription
+        posterUrl backdrops { backdropUrl } genres { shortName } scoring { imdbScore tomatoMeter } }
+      offers(country: $country, platform: WEB) { monetizationType package { clearName technicalName icon(profile: S100) } } } }
+  }
+}"""
+
+
+def _jw_img(path, profile):
+    return "https://images.justwatch.com" + path.replace("{profile}", profile).replace("{format}", "jpg") if path else None
+
+
+def _first_sentence(text):
+    text = " ".join((text or "").split())
+    for m in re.finditer(r"[.!?](\s|$)", text):
+        end = m.start() + 1
+        if end > 110:
+            break
+        word = text[:end].rsplit(" ", 1)[-1]
+        if end >= 30 and not re.fullmatch(r"(Dr|Mr|Mrs|Ms|St|Jr|Sr|vs|[A-Z])\.", word):
+            return text[:end]
+    return text if len(text) <= 110 else text[:105].rsplit(" ", 1)[0].rstrip(",;:") + "..."
+
+
+async def get_trending(kind):
+    c = trending_cache.get(kind)
+    if c and time.time() - c["at"] < TRENDING_EVERY:
+        return c["items"]
+    import aiohttp
+    flt = {"monetizationTypes": ["FLATRATE"]}
+    couple_out = {"ani", "hrr", "fml", "scf", "war", "crm", "trl", "act"}
+    if kind == "romance":
+        flt["genres"] = ["rma"]
+        flt["excludeGenres"] = sorted(couple_out)
+    payload = {"query": _TRENDING_Q, "variables": {"country": config.COUNTRY, "first": 60, "filter": flt}}
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as s:
+            async with s.post("https://apis.justwatch.com/graphql", json=payload,
+                              headers={"User-Agent": "couch-tv bridge"}) as r:
+                j = await r.json(content_type=None)
+        edges = j["data"]["popularTitles"]["edges"]
+    except Exception as e:
+        log.warning("trending %s: %s", kind, e)
+        return c["items"] if c else []
+    items = []
+    for rank, e in enumerate(edges, 1):
+        n, ct = e["node"], e["node"].get("content") or {}
+        genres = {g["shortName"] for g in ct.get("genres") or []}
+        if kind == "romance" and (genres & couple_out or "rma" not in genres):
+            continue
+        where, seen = [], set()
+        for o in n.get("offers") or []:
+            app = apps.BY_JW.get(o["package"]["technicalName"])
+            if o["monetizationType"] in ("FLATRATE", "FREE", "ADS") and app and app["id"] not in seen:
+                seen.add(app["id"])
+                where.append({"service": app["id"], "name": app["name"], "package": app["package"],
+                              "icon": _jw_img(o["package"].get("icon"), "s100")})
+        backdrops = ct.get("backdrops") or []
+        if not where or not backdrops:
+            continue
+        sc = ct.get("scoring") or {}
+        items.append({
+            "title": ct.get("title"), "year": ct.get("originalReleaseYear"),
+            "type": "movie" if n.get("objectType") == "MOVIE" else "tv", "rank": rank,
+            "backdrop": _jw_img(backdrops[0]["backdropUrl"], "s1440"),
+            "poster": _jw_img(ct.get("posterUrl"), "s592"),
+            "imdb": sc.get("imdbScore"), "rt": sc.get("tomatoMeter"),
+            "quote": _first_sentence(ct.get("shortDescription")),
+            "romcom": "cmy" in genres, "where": where})
+    if kind == "romance":   # romantic comedies first, then the other love stories
+        items.sort(key=lambda x: (not x["romcom"], x["rank"]))
+    items = items[:20]
+    if items:
+        trending_cache[kind] = {"at": time.time(), "items": items}
+    return items or (c["items"] if c else [])
+
+
+async def h_trending(request):
+    kind = "romance" if request.query.get("who") == "both" else "all"
+    return ok(items=await get_trending(kind), kind=kind)
 
 
 # ---------- app order, arranged from the phone ----------
@@ -1938,6 +2143,8 @@ def make_app():
     r.add_get("/api/who", h_who_get)
     r.add_post("/api/who", h_who_set)
     r.add_get("/api/weather", h_weather)
+    r.add_get("/api/news", h_news)
+    r.add_get("/api/trending", h_trending)
     r.add_get("/api/config", h_config)
     r.add_post("/api/home-apps", h_home_apps)
     r.add_get("/api/app-order", h_app_order_get)

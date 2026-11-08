@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "TV",
-  "short_name": "TV",
+  "name": "Couch TV",
+  "short_name": "Couch TV",
   "description": "Phone remote for your Google TV.",
   "lang": "en-AU",
   "dir": "ltr",

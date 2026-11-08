@@ -151,12 +151,28 @@
   var lift = null;                   // the dock app picked up to move: {pkg}
   var newApps = [];                  // apps installed since this TV first saw its apps, until opened once
 
+  // Two or more people also get "Both" at the end of the switch: watching together has its own look,
+  // couple picks and little notes instead of the headlines. It is never saved as a person.
   function setPeople(list) {
-    PEOPLE = (list || []).filter(function (p) { return p && p.id && p.name; });
+    PEOPLE = (list || []).filter(function (p) { return p && p.id && p.name && p.id !== "both"; });
     NOBODY = !PEOPLE.length;
     if (NOBODY) PEOPLE = [{ id: "both", name: t("everyone") }];
+    else if (PEOPLE.length >= 2) PEOPLE.push({ id: "both", name: "Both", both: true, theme: "love" });
     PEOPLE.forEach(function (p) { if (!data.showsBy[p.id]) data.showsBy[p.id] = []; });
     if (!PEOPLE.some(function (p) { return p.id === who; })) who = PEOPLE[0].id;
+    applyLook();
+  }
+  function realPeople() { return NOBODY ? [] : PEOPLE.filter(function (p) { return !p.both; }); }
+  // The page's look follows who is watching (people[].theme in config.json): html.look-<theme>.
+  var lookNow = "";
+  function applyLook() {
+    var p = PEOPLE.filter(function (x) { return x.id === who; })[0];
+    var th = (p && p.theme) || "";
+    if (th === lookNow) return;
+    var d = document.documentElement;
+    if (lookNow) d.classList.remove("look-" + lookNow);
+    if (th) d.classList.add("look-" + th);
+    lookNow = th;
   }
   // An order made on this TV with no bridge to keep it (or before the bridge heard about it).
   function localPeopleOrder(list, always) {
@@ -619,6 +635,102 @@
     return (direct ? weatherDirect() : api("GET", "/api/weather")).then(function (j) { data.weather = j; clock(); }, function () {});
   }
 
+  // Headlines from the bridge (/api/news, the feeds in config.json), one at a time in a glass card.
+  // Each person gets their own extra feeds (news.people in config.json); "Both" gets little notes
+  // for the two of them instead.
+  var NEWS = [], newsAt = 0, newsFor = null;
+  function refreshNews() {
+    if (!NIGHT || OFFLINE) return;
+    var asked = who;
+    newsFor = asked;
+    api("GET", "/api/news?who=" + encodeURIComponent(asked || "")).then(function (j) {
+      if (asked !== who) return;   // someone else picked meanwhile
+      NEWS = (j && j.items) || [];
+      newsAt = 0;
+      $("news").classList.toggle("couple", j && j.kind === "couple");
+      $("news").classList.toggle("on", NEWS.length > 0);
+      document.documentElement.classList.toggle("has-news", NEWS.length > 0);
+      scrollShelf();
+      showNews();
+    }, function () {});
+  }
+  var NEWS_MS = 14000;
+  var NEWS_DOTS = ["#ff5a5f", "#4fc3f7", "#ffb74d", "#f06292", "#81c784", "#ba68c8"];
+  var newsSources = [];
+  function showNews() {
+    var it = NEWS[newsAt];
+    if (!it) return;
+    if (newsSources.indexOf(it.source) < 0) newsSources.push(it.source);
+    $("news").style.setProperty("--news-dot", NEWS_DOTS[newsSources.indexOf(it.source) % NEWS_DOTS.length]);
+    $("news-src").textContent = it.source;
+    $("news-title").textContent = it.title;
+    var bar = $("news-bar");
+    bar.classList.remove("run");
+    void bar.offsetWidth;   // restart the animation
+    bar.style.animationDuration = NEWS_MS + "ms";
+    bar.classList.add("run");
+  }
+  function nextNews() {
+    if (NEWS.length < 2 || zone === "settings") return;
+    var el = $("news-title");
+    el.classList.add("out");
+    setTimeout(function () { newsAt = (newsAt + 1) % NEWS.length; showNews(); el.classList.remove("out"); }, 400);
+  }
+
+  // Shows to watch (bridge /api/trending: this week's most popular titles here, from JustWatch, on
+  // the streaming apps this TV has; romance and romcoms for "Both"). Night look: they take turns in
+  // the big card on the left, after anything in Keep watching. OK plays the one showing.
+  var PICKS = [], picksFor = null, PICK_MS = 9000;
+  function refreshPicks() {
+    if (!NIGHT || OFFLINE) return;
+    var asked = who;
+    picksFor = asked;
+    api("GET", "/api/trending?who=" + encodeURIComponent(asked || ""), null, 20000).then(function (j) {
+      if (asked !== who) return;
+      PICKS = (j && j.items) || [];
+      s = 0;
+      renderShelf();
+      paintFocus();
+    }, function () {});
+  }
+  // the titles whose app is on this TV, each with the first such app (all of them in a preview)
+  function pickList() {
+    var have = {};
+    data.apps.forEach(function (a) { have[a.package] = true; });
+    var any = !data.apps.length || PREVIEW || MOCK;
+    return PICKS.map(function (p) {
+      var on = (p.where || []).filter(function (w) { return any || have[w.package]; })[0];
+      if (!on) return null;
+      var o = {}; for (var k in p) o[k] = p[k];
+      o.pick = true; o.on = on;
+      return o;
+    }).filter(Boolean);
+  }
+  // IMDb's score out of 10 as five stars: grey stars with gold ones clipped on top
+  function starsHTML(score) {
+    if (!score) return "";
+    var pct = Math.max(0, Math.min(100, score * 10));
+    return '<span class="stars"><span class="s-off">★★★★★</span><span class="s-on" style="width:' + pct + '%">★★★★★</span></span>';
+  }
+  function cardLabel(it) {
+    if (!it) return t("keep_watching");
+    if (!it.pick) return t("keep_watching");
+    return who === "both" ? "Date night picks" : "Trending this week";
+  }
+  // the card showing: the others fade out, the heading and the count follow it
+  function showCard() {
+    if (!NIGHT) return;
+    shelfEls.forEach(function (el, i) { el.classList.toggle("cur", i === s); });
+    $("shelf-title").textContent = cardLabel(data.shows[s]);
+    var c = $("shelf-count");
+    if (c) c.textContent = shelfEls.length > 1 ? (s + 1) + " / " + shelfEls.length : "";
+  }
+  function nextCard() {
+    if (!NIGHT || zone === "shelf" || zone === "settings" || shelfEls.length < 2) return;
+    s = (s + 1) % shelfEls.length;
+    showCard();
+  }
+
   // Open-Meteo (free, no key), the same call the bridge makes. The words come from i18n.js.
   var WMO_KEY = { 0: "wx_clear", 1: "wx_mostly_clear", 2: "wx_partly", 3: "wx_cloudy", 45: "wx_fog", 48: "wx_fog",
     51: "wx_drizzle", 53: "wx_drizzle", 55: "wx_drizzle", 56: "wx_drizzle", 57: "wx_drizzle", 61: "wx_light_rain",
@@ -806,7 +918,7 @@
 
   // ---------------- who is watching: none, a pill switch for two, a head icon and a list for more ----------------
   var PALETTE = ["#ff9f0a", "#30b350", "#0a84ff", "#bf5af2", "#ff375f", "#00a5a8", "#5e5ce6", "#ac8e68"];
-  function peopleCount() { return NOBODY ? 0 : PEOPLE.length; }
+  function peopleCount() { return realPeople().length; }
   function isHead() { return peopleCount() >= 3; }
   function colourOf(p) {
     if (p.colour) return p.colour;
@@ -858,12 +970,15 @@
     who = id; s = 0;
     try { localStorage.setItem("tvhome.who", who); } catch (e) {}
     if (!NOBODY) api("POST", "/api/who", { who: who }).catch(function () {});
+    applyLook();
     renderShelf();
+    refreshNews();
+    refreshPicks();
   }
   // The order of the names: kept by the bridge (the phone's People sheet uses the same list), or on
   // this TV when there is no bridge. "pending" means the bridge has not heard about it yet.
   function savePeopleOrder() {
-    var ids = PEOPLE.map(function (p) { return p.id; });
+    var ids = realPeople().map(function (p) { return p.id; });
     keep("tvhome.people.order", { ids: ids, pending: true });
     if (OFFLINE || data.bridge === false) return;
     api("POST", "/api/people", { order: ids })
@@ -878,7 +993,10 @@
   function renderShelf() {
     var track = $("shelf");
     data.shows = data.showsBy[who] || [];
-    var anyone = PEOPLE.some(function (p) { return (data.showsBy[p.id] || []).length; });
+    var picks = NIGHT ? pickList() : [];
+    if (NIGHT) data.shows = data.shows.slice(0, 3).concat(picks);
+    if (s >= data.shows.length) s = 0;
+    var anyone = picks.length > 0 || PEOPLE.some(function (p) { return (data.showsBy[p.id] || []).length; });
     // nobody has anything on the go: no empty box, the photo has the space
     $("shelf-section").classList.toggle("empty", !anyone);
     $("people").classList.toggle("empty", !anyone);
@@ -890,18 +1008,34 @@
       return;
     }
     if (NIGHT) {
-      // lock screen notifications: the first three shows as glass cards
-      data.shows = data.shows.slice(0, 3);
-      track.innerHTML = data.shows.map(function (it) {
-        var art = it.backdrop || it.poster, pkg = it.app && it.app.package;
-        var ep = it.season && it.episode ? "S" + it.season + " E" + it.episode : (it.episode_title || "");
-        return '<div class="tile ncard">' +
-          (art ? '<img class="thumb" src="' + esc(art) + '" alt="" decoding="async">' : '<span class="thumb none"></span>') +
-          '<div class="t"><div class="nap">' + (pkg && iconUrl(pkg) ? '<img src="' + esc(iconUrl(pkg)) + '" alt="" onerror="this.remove()">' : "") +
-          esc(it.app ? it.app.name : "") + "</div><b>" + esc(it.title) + "</b>" + (ep ? "<i>" + esc(ep) + "</i>" : "") +
-          (it.progress ? '<span class="nbar"><i style="width:' + Math.round(it.progress * 100) + '%"></i></span>' : "") + "</div></div>";
+      // one big card at a time, taking turns: Keep watching first, then shows to watch
+      track.innerHTML = data.shows.map(function (it, i) {
+        var art = it.backdrop || it.poster, logo = "", meta = "", line = "", app = "";
+        if (it.pick) {
+          var pkg = it.on.package, mine = iconUrl(pkg);
+          logo = '<span class="plogo"><img src="' + esc(mine || it.on.icon) + '" alt=""' +
+            (mine && it.on.icon ? ' onerror="this.onerror=null;this.src=\'' + esc(it.on.icon) + '\'"' : "") + "></span>";
+          app = esc(it.on.name) + (it.rank && who !== "both" ? "  ·  #" + it.rank + " this week" : "");
+          meta = starsHTML(it.imdb) + (it.imdb ? '<span class="score">' + it.imdb.toFixed(1) + " IMDb</span>" : "") +
+            (it.rt ? '<span class="score rt">' + it.rt + "% critics</span>" : "") +
+            (it.year ? '<span class="score">' + it.year + "</span>" : "");
+          line = it.quote ? '<q class="pquote">“' + esc(it.quote) + '”</q>' : "";
+        } else {
+          var kpkg = it.app && it.app.package;
+          if (kpkg && iconUrl(kpkg)) logo = '<span class="plogo"><img src="' + esc(iconUrl(kpkg)) + '" alt="" onerror="this.parentNode.remove()"></span>';
+          app = esc(it.app ? it.app.name : "");
+          var ep = it.season && it.episode ? "S" + it.season + " E" + it.episode : (it.episode_title || "");
+          meta = ep ? '<span class="score">' + esc(ep) + "</span>" : "";
+          line = it.progress ? '<span class="nbar"><i style="width:' + Math.round(it.progress * 100) + '%"></i></span>' : "";
+        }
+        return '<div class="tile pcard' + (i === s ? " cur" : "") + '">' +
+          (art ? '<img class="pbg" src="' + esc(art) + '" alt="">' : "") +
+          '<span class="pshade"></span>' + logo +
+          '<div class="pt"><div class="papp">' + app + "</div><b>" + esc(it.title) + "</b>" +
+          (meta ? '<div class="pmeta">' + meta + "</div>" : "") + line + "</div></div>";
       }).join("");
       shelfEls = Array.prototype.slice.call(track.children);
+      showCard();
       return;
     }
     track.innerHTML = data.shows.map(function (it) {
@@ -1226,6 +1360,10 @@
       // the dock is as wide as what is in it; More apps uses all twelve columns
       GRID_COLS = expanded ? 12 : Math.max(1, Math.min(12, gridItems.length));
       $("grid").style.gridTemplateColumns = "repeat(" + GRID_COLS + ", 7rem)";
+      // no CSS grid (LG webOS 4): the flex fallback in app.css needs the width set (7rem app + 1.625rem gap each)
+      if (!(window.CSS && CSS.supports && CSS.supports("display", "grid"))) {
+        $("grid").style.width = (GRID_COLS * 8.625 + 1.875) + "rem";
+      }
     }
     $("grid").innerHTML = gridItems.map(appHTML).join("");
     gridEls = Array.prototype.slice.call($("grid").children);
@@ -1242,9 +1380,12 @@
   function scrollShelf() {
     var track = $("shelf");
     var el = shelfEls[s];
+    if (NIGHT) { track.style.transform = ""; showCard(); return; }   // one card at a time, fading
     if (!el) { track.style.transform = ""; return; }
     var step = el.offsetWidth + parseFloat(getComputedStyle(track).columnGap || 0);
-    var first = Math.max(0, Math.min(s - 2, shelfEls.length - 5));   // keep up to five in view
+    // keep the focused card in view: as many as fit (five on Classic, fewer beside the headlines)
+    var view = Math.max(1, Math.min(5, Math.floor(($("shelf-section").clientWidth + step - el.offsetWidth) / step)));
+    var first = Math.max(0, Math.min(s - Math.floor((view - 1) / 2), shelfEls.length - view));
     track.style.transform = "translateX(" + (-first * step) + "px)";
   }
 
@@ -1349,7 +1490,8 @@
         pi = Math.max(0, Math.min(PEOPLE.length - 1, pi + dx));
       } else if (dy > 0) zone = cards.length ? "shelf" : "grid";
     } else if (zone === "shelf") {
-      if (dx) s = Math.max(0, Math.min(shelfEls.length - 1, s + dx));
+      if (dx && NIGHT) s = (s + dx + shelfEls.length) % shelfEls.length;   // the cards go round
+      else if (dx) s = Math.max(0, Math.min(shelfEls.length - 1, s + dx));
       else if (dy < 0) { if (peopleOn()) toPeople(); else if (hasQuick()) { zone = "quick"; qi = 0; } }
       else if (dy > 0 && gridEls.length) {
         // land on the app under the show
@@ -1440,6 +1582,16 @@
     if (zone === "shelf") {
       var it = data.shows[s];
       if (!it) return;
+      if (it.pick) {   // a show to watch: the bridge finds it in that app and plays it
+        status(t("opening_in", { title: it.title, app: it.on.name }), true);
+        api("POST", "/api/play", { title: it.title, service: it.on.service, who: NOBODY ? "both" : who }, 60000)
+          .then(function (res) { status(res.note || ""); })
+          .catch(function (e) {
+            if (TV && TV.launch(it.on.package)) { status(""); return; }
+            status(e.message);
+          });
+        return;
+      }
       status(it.app ? t("opening_in", { title: it.title, app: it.app.name }) : t("opening", { title: it.title }), true);
       if (it.wn && TV && TV.openWatchNext) {
         if (!TV.openWatchNext(String(it.id)) && it.app) TV.launch(it.app.package);
@@ -1984,7 +2136,7 @@
 
   // ---- people: the same list the phone's People sheet edits ----
   function peopleRows() {
-    var list = NOBODY ? [] : PEOPLE, rows = [];
+    var list = realPeople(), rows = [];
     if (!list.length) rows.push(info("people-none", t("people_none")));
     list.forEach(function (p) {
       rows.push({ kind: "nav", key: "person:" + p.id, label: p.name, avatar: p, sub: p.id === who && list.length > 1 ? t("person_on") : "",
@@ -1998,7 +2150,7 @@
     rows.push(info("people-note", t("people_note")));
     return rows;
   }
-  function personById(id) { return NOBODY ? null : PEOPLE.filter(function (p) { return p.id === id; })[0] || null; }
+  function personById(id) { return realPeople().filter(function (p) { return p.id === id; })[0] || null; }
   function openPerson(id) {
     SET.sub = { back: "person:" + id, crumb: t("sec_people"),
       title: function () { var p = personById(id); return p ? p.name : ""; },
@@ -2026,9 +2178,9 @@
   }
   // Kept on this TV (pending) and handed to the bridge, which keeps it in bridge/data/people.json.
   function savePeopleList() {
-    var list = NOBODY ? [] : PEOPLE.map(function (p) {
+    var list = realPeople().map(function (p) {
       var o = { id: p.id, name: p.name };
-      ["colour", "kid", "guest"].forEach(function (k) { if (p[k] != null) o[k] = p[k]; });
+      ["colour", "kid", "guest", "theme"].forEach(function (k) { if (p[k] != null) o[k] = p[k]; });
       return o;
     });
     keep("tvhome.people.list", { people: list, pending: true });
@@ -2040,7 +2192,7 @@
       .then(function (r) { keep("tvhome.people.list", { people: r.people || list, pending: false }); }, function () {});
   }
   function addPerson(v) {
-    var name = cleanName(v), list = NOBODY ? [] : PEOPLE.slice();
+    var name = cleanName(v), list = realPeople();
     if (!name) return;
     if (list.length >= 12) { SET.msg = t("people_full"); return; }
     var id = newPersonId(name, list);
@@ -2057,7 +2209,7 @@
   }
   function removePerson(id) {
     if (NOBODY) return;
-    setPeople(PEOPLE.filter(function (p) { return p.id !== id; }));
+    setPeople(realPeople().filter(function (p) { return p.id !== id; }));
     savePeopleList();
     SET.sub = null;
     SET.keyFocus = "people-add";
@@ -2065,7 +2217,7 @@
   function movePerson(id, d) {
     if (NOBODY) return;
     var i = PEOPLE.map(function (p) { return p.id; }).indexOf(id), j = i + d;
-    if (i < 0 || j < 0 || j >= PEOPLE.length) return;
+    if (i < 0 || j < 0 || j >= realPeople().length) return;   // "Both" stays last
     var x = PEOPLE[i]; PEOPLE[i] = PEOPLE[j]; PEOPLE[j] = x;
     renderPeople();
   }
@@ -2597,6 +2749,10 @@
         detectNew();
         status(data.bridge ? "" : t("computer_quiet"), true);
         if (data.bridge) save();
+        // the phone may have changed who is watching: their look, headlines and picks
+        applyLook();
+        if (NIGHT && data.bridge && newsFor !== who) refreshNews();
+        if (NIGHT && data.bridge && picksFor !== who) refreshPicks();
         render();
         clearTimeout(retryTimer);
         if (!ok[0] && !ok[1]) { retryMs = Math.min(retryMs * 2, 60000); retryTimer = setTimeout(refresh, retryMs); }
@@ -2637,6 +2793,12 @@
       if (document.fonts) document.fonts.load("300 10px Antonio").then(function () { glassShown = ""; clock(); });
       refreshWeather();
       setInterval(refreshWeather, WX_EVERY * 60000);
+      refreshNews();
+      setInterval(refreshNews, 15 * 60000);
+      setInterval(nextNews, NEWS_MS);
+      refreshPicks();
+      setInterval(refreshPicks, 3 * 3600000);
+      setInterval(nextCard, PICK_MS);
     }
     photo = photoForHour(new Date().getHours());
     showPhoto();

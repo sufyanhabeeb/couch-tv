@@ -102,6 +102,7 @@ WEBOS = {
     "abc-iview": {"ids": [], "names": ["ABC iview", "iview"]},
     "sbs-on-demand": {"ids": [], "names": ["SBS On Demand"]},
     "settings": {"ids": ["com.palm.app.settings"]},
+    "spotify": {"ids": ["spotify-beehive"], "names": ["Spotify - Music and Podcasts"]},
 }
 
 BY_ID = {a["id"]: a for a in APPS}

@@ -72,7 +72,9 @@ function Backdrop({ image, colour, off }) {
     <div className={`backdrop ${off ? 'off' : ''}`} aria-hidden="true">
       {layers.map((l, i) => (
         <div key={l.key} className={`bd-layer ${i === layers.length - 1 ? 'top' : ''}`}
-          style={l.image ? { backgroundImage: `url("${l.image}")` } : { background: `radial-gradient(120% 70% at 50% 18%, color-mix(in srgb, ${l.colour || '#2a2a30'} 55%, #000), #050506 75%)` }} />
+          style={l.image ? { backgroundImage: `url("${l.image}")` }
+            : l.colour && !/^#0{3}(0{3})?$/.test(l.colour) ? { background: `radial-gradient(120% 70% at 50% 18%, color-mix(in srgb, ${l.colour} 55%, #000), #050506 75%)` }
+              : { background: 'transparent' }} />
       ))}
       <div className="bd-shade" />
     </div>
@@ -200,6 +202,13 @@ export default function App() {
     setWho(v);
     api.setWho(v).catch(() => { say(t('cant_tell_who'), 'err'); if (couchRef.current) setWho(couchRef.current); });
   };
+  // The look follows who is watching, like the TV home (people[].theme in config.json; "Both" is love).
+  const look = who === 'both' && people.length > 1 ? 'love' : people.find((p) => p.id === who)?.theme || '';
+  useEffect(() => {
+    const d = document.documentElement;
+    [...d.classList].filter((c) => c.startsWith('look-')).forEach((c) => d.classList.remove(c));
+    if (look) d.classList.add(`look-${look}`);
+  }, [look]);
   const couch = tv?.who;
   const couchRef = useRef(couch);
   couchRef.current = couch;
@@ -227,6 +236,7 @@ export default function App() {
   useEffect(() => { if (tv?.power === 'on') setWakeError(null); }, [tv?.power]);
   const onKey = (key, hold) => run(api.key(key, hold));
   const onVolume = (a) => run(api.volume(a));
+  const onVolumeLevel = (level) => run(api.volumeLevel(level));
   // A fully off TV leaves the Wi-Fi; the bridge tries Wake-on-LAN for up to 25 s, then gives up.
   const onWake = async () => {
     setWakeError(null);
@@ -329,7 +339,7 @@ export default function App() {
       </div>
       <Pad onKey={onKey} offState={offState} wakeError={wakeError} onWake={onWake} onRetry={onRetry}
         tvName={thisTv?.name} onLivingRoom={() => { tick(); chooseTv(null); }} />
-      <Controls tv={tv} onKey={onKey} onVolume={onVolume} />
+      <Controls tv={tv} onKey={onKey} onVolume={onVolume} onVolumeLevel={onVolumeLevel} />
       {wide && askOn && <AskButton onAsk={openAsk} quiet={Boolean(offState)} />}
     </div>
   );

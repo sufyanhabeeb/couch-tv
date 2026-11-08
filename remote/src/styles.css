@@ -16,6 +16,8 @@
   --ctl: 56px;
   --ask-h: 62px;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --accent: #ff8a5c;     /* the TV home's golden-hour orange */
+  --accent-2: #b46cff;   /* and its dusk violet */
   --font: -apple-system, 'SF Pro Text', system-ui, 'Helvetica Neue', sans-serif;
   --font-d: -apple-system, 'SF Pro Display', system-ui, 'Helvetica Neue', sans-serif;
   /* Safe areas, every edge. --sat..--sal can be overridden by the ?insets= test hook; --guard-t is
@@ -53,7 +55,15 @@ button.glass:active, .seg button:active, .volume button:active { background: var
 button.solid:active { background: #d9d9de; }
 
 /* Backdrop */
-.backdrop { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; background: #050506; }
+.backdrop {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  /* nothing playing: a soft dusk glow, like the TV home's scenes */
+  background:
+    radial-gradient(90% 55% at 15% 0%, rgba(180, 108, 255, 0.32), transparent 70%),
+    radial-gradient(80% 50% at 100% 30%, rgba(255, 138, 92, 0.22), transparent 70%),
+    radial-gradient(90% 60% at 50% 110%, rgba(64, 120, 255, 0.2), transparent 70%),
+    #07070b;
+}
 .bd-layer {
   position: absolute; inset: -80px; background-size: cover; background-position: center;
   filter: blur(48px) saturate(1.5) brightness(0.5); opacity: 0; transition: opacity 0.9s var(--ease);
@@ -63,6 +73,58 @@ button.solid:active { background: #d9d9de; }
 .backdrop.off .bd-layer { filter: none; }
 
 .app { position: relative; z-index: 1; height: 100%; }
+
+/* ---------- a look for whoever is watching, the same as the TV home (html.look-<theme>) ---------- */
+.backdrop, .glass, .ask, .vol-fill, .pad .ring { transition: background 0.6s var(--ease), border-color 0.6s, box-shadow 0.6s; }
+/* hero:Iron Man and Batman, gunmetal glass, red and gold, a faint arc-reactor grid */
+.look-hero { --accent: #f5b301; --accent-2: #d4202f; --glass: rgba(14, 15, 20, 0.55); --glass-press: rgba(245, 179, 1, 0.22); --rim: rgba(245, 179, 1, 0.38); }
+.look-hero .backdrop {
+  background:
+    repeating-linear-gradient(0deg, rgba(110, 220, 255, 0.04) 0 1px, transparent 1px 44px),
+    repeating-linear-gradient(90deg, rgba(110, 220, 255, 0.04) 0 1px, transparent 1px 44px),
+    radial-gradient(90% 50% at 0% 105%, rgba(212, 32, 47, 0.45), transparent 70%),
+    radial-gradient(80% 45% at 100% 100%, rgba(245, 179, 1, 0.22), transparent 70%),
+    radial-gradient(60% 35% at 50% 0%, rgba(110, 220, 255, 0.12), transparent 70%),
+    #05060a;
+}
+.look-hero .glass { box-shadow: inset 0 1px 0 rgba(255, 215, 106, 0.22), 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 18px rgba(212, 32, 47, 0.12); }
+.look-hero .pad .ring { border-color: rgba(245, 179, 1, 0.7); background: radial-gradient(circle at 50% 50%, rgba(140, 230, 255, 0.35), rgba(110, 220, 255, 0.06) 60%, transparent 72%);
+  box-shadow: 0 0 0 10px rgba(245, 179, 1, 0.06), 0 0 40px rgba(110, 220, 255, 0.35), inset 0 0 18px rgba(140, 230, 255, 0.35); }
+.look-hero .pad .ring.lit { box-shadow: 0 0 0 10px rgba(245, 179, 1, 0.12), 0 0 60px rgba(140, 230, 255, 0.6), inset 0 0 24px rgba(140, 230, 255, 0.55); }
+.look-hero .ask { background: linear-gradient(100deg, #8b0d18, #d4202f 50%, #f5b301); color: #fff7d6; box-shadow: 0 10px 30px rgba(212, 32, 47, 0.4), inset 0 1px 0 rgba(255, 215, 106, 0.5); }
+.look-hero .tabs-thumb { background: rgba(245, 179, 1, 0.25); }
+.look-hero .vol-knob { background: #f5b301; color: #1a0d00; }
+/* rose:pink glass on a blush glow */
+.look-rose { --accent: #ff9ccd; --accent-2: #ff4f9a; --glass: rgba(255, 120, 180, 0.16); --glass-press: rgba(255, 140, 190, 0.3); --rim: rgba(255, 175, 212, 0.42); }
+.look-rose .backdrop {
+  background:
+    radial-gradient(90% 55% at 85% 0%, rgba(255, 170, 210, 0.42), transparent 70%),
+    radial-gradient(90% 55% at 10% 100%, rgba(255, 79, 154, 0.4), transparent 70%),
+    radial-gradient(70% 40% at 0% 40%, rgba(190, 90, 255, 0.18), transparent 70%),
+    #14060d;
+}
+.look-rose .glass { box-shadow: inset 0 1px 0 rgba(255, 210, 230, 0.3), 0 6px 20px rgba(60, 0, 30, 0.3), 0 0 18px rgba(255, 95, 162, 0.12); }
+.look-rose .pad .ring { border-color: rgba(255, 175, 212, 0.75); box-shadow: 0 0 0 10px rgba(255, 140, 190, 0.07), 0 0 44px rgba(255, 95, 162, 0.4); }
+.look-rose .pad .ring.lit { box-shadow: 0 0 0 10px rgba(255, 140, 190, 0.14), 0 0 60px rgba(255, 95, 162, 0.6); }
+.look-rose .ask { background: linear-gradient(100deg, #ff4f9a, #ff7eb6 55%, #ffb3d9); box-shadow: 0 10px 30px rgba(255, 79, 154, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.45); }
+.look-rose .tabs-thumb { background: rgba(255, 140, 190, 0.32); }
+.look-rose .vol-knob { background: #ffd1e8; color: #6b0f3a; }
+/* love (Both): warm candlelight, rose gold */
+.look-love { --accent: #ffb38a; --accent-2: #ff6b8b; --glass: rgba(255, 160, 140, 0.14); --glass-press: rgba(255, 170, 150, 0.28); --rim: rgba(255, 192, 165, 0.4); }
+.look-love .backdrop {
+  background:
+    radial-gradient(100% 50% at 50% 110%, rgba(255, 105, 120, 0.45), transparent 70%),
+    radial-gradient(80% 45% at 0% 0%, rgba(255, 170, 110, 0.3), transparent 70%),
+    radial-gradient(70% 40% at 100% 20%, rgba(255, 120, 160, 0.2), transparent 70%),
+    #120709;
+}
+.look-love .glass { box-shadow: inset 0 1px 0 rgba(255, 220, 200, 0.3), 0 6px 20px rgba(40, 0, 15, 0.3), 0 0 18px rgba(255, 120, 130, 0.12); }
+.look-love .pad .ring { border-color: rgba(255, 200, 175, 0.75); box-shadow: 0 0 0 10px rgba(255, 170, 150, 0.07), 0 0 44px rgba(255, 120, 130, 0.4); }
+.look-love .pad .ring.lit { box-shadow: 0 0 0 10px rgba(255, 170, 150, 0.14), 0 0 60px rgba(255, 120, 130, 0.6); }
+.look-love .ask { background: linear-gradient(100deg, #ff6b8b, #ff8f8f 50%, #ffb38a); box-shadow: 0 10px 30px rgba(255, 107, 139, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.45); }
+.look-love .tabs-thumb { background: rgba(255, 170, 150, 0.3); }
+.look-love .vol-knob { background: #ffe0d2; color: #6b1a2a; }
+.look-love .pad::after { content: '\2665'; position: absolute; top: 14px; right: 18px; font-size: 18px; color: rgba(255, 140, 150, 0.55); pointer-events: none; }
 main { position: relative; z-index: 1; height: 100%; }
 
 /* Single column (normal iPhone, Duo cover screen) */
@@ -139,8 +201,18 @@ main { position: relative; z-index: 1; height: 100%; }
 .pad .chev.down.lit { transform: rotate(180deg) translateY(-3px); }
 .pad .chev.left.lit { transform: rotate(-90deg) translateY(-3px); }
 .pad .chev.right.lit { transform: rotate(90deg) translateY(-3px); }
-.pad .ring { width: 92px; height: 92px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.24); transition: background 0.35s, transform 0.35s var(--ease); }
-.pad .ring.lit { background: rgba(255, 255, 255, 0.16); transform: scale(0.94); transition: none; }
+.pad::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(60% 45% at 50% 50%, rgba(255, 255, 255, 0.07), transparent 70%);
+}
+.pad .ring {
+  width: 100px; height: 100px; border-radius: 50%;
+  background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04) 70%);
+  border: 1.5px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 0 0 10px rgba(255, 255, 255, 0.03), 0 0 40px rgba(180, 108, 255, 0.18);
+  transition: background 0.35s, transform 0.35s var(--ease), box-shadow 0.35s;
+}
+.pad .ring.lit { background: rgba(255, 255, 255, 0.24); transform: scale(0.94); box-shadow: 0 0 0 10px rgba(255, 255, 255, 0.06), 0 0 50px rgba(255, 138, 92, 0.35); transition: none; }
 .pad .spot {
   position: absolute; left: -70px; top: -70px; width: 140px; height: 140px; border-radius: 50%; pointer-events: none;
   background: radial-gradient(circle, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 68%);
@@ -160,17 +232,36 @@ main { position: relative; z-index: 1; height: 100%; }
 .spinner.dark { border-color: rgba(0, 0, 0, 0.2); border-top-color: #111; }
 .pad .wake { position: relative; height: 52px; padding: 0 22px; border-radius: 26px; display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 17px; }
 
-/* Bottom controls */
+/* Bottom controls: three wide buttons, then the volume slider */
+.controls-wrap { display: flex; flex-direction: column; gap: 10px; flex: none; }
 .controls { display: flex; gap: 10px; align-items: center; }
+.pillbtn { flex: 1; height: var(--ctl); border-radius: calc(var(--ctl) / 2); display: grid; place-items: center; transition: transform 0.15s var(--ease); }
+.pillbtn:active { transform: scale(0.96); }
+.volbar { height: var(--ctl); border-radius: calc(var(--ctl) / 2); display: flex; align-items: center; gap: 2px; padding: 0 4px; }
+.vol-btn { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; flex: none; color: var(--ink); }
+.vol-btn:active { background: var(--glass-press); }
+.vol-track { position: relative; flex: 1; height: 100%; margin: 0 14px; touch-action: none; cursor: pointer; outline-offset: -6px; }
+.vol-rail { position: absolute; left: 0; right: 0; top: 50%; height: 8px; margin-top: -4px; border-radius: 4px; background: rgba(255, 255, 255, 0.16); overflow: hidden; }
+.vol-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent-2), var(--accent)); }
+.vol-knob {
+  position: absolute; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%;
+  background: #fff; color: #111; display: grid; place-items: center; font: 700 12px/1 var(--font); font-variant-numeric: tabular-nums;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4); pointer-events: none;
+}
+.volbar.is-muted .vol-fill { background: rgba(255, 255, 255, 0.35); }
+.vol-unknown { flex: 1; text-align: center; font-weight: 600; color: var(--ink-2); }
+.app.is-off .controls-wrap { opacity: 0.4; pointer-events: none; }
 .volume { flex: 1; height: var(--ctl); border-radius: calc(var(--ctl) / 2); display: flex; align-items: stretch; overflow: hidden; }
 .volume button { width: 48px; display: grid; place-items: center; flex: none; touch-action: pan-x; }
 .volume .vol-mid { flex: 1; width: auto; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600; font-size: 16px; font-variant-numeric: tabular-nums; color: var(--ink-2); }
 .ask {
-  height: var(--ask-h); border-radius: calc(var(--ask-h) / 2); background: #e4e4e8; color: var(--on-solid);
-  display: flex; align-items: center; justify-content: center; gap: 10px; font: 600 17px/1 var(--font); flex: none;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); transition: transform 0.2s var(--ease);
+  height: var(--ask-h); border-radius: calc(var(--ask-h) / 2); color: #fff;
+  background: linear-gradient(100deg, var(--accent-2), #ff6f91 55%, var(--accent));
+  display: flex; align-items: center; justify-content: center; gap: 10px; font: 700 17px/1 var(--font); flex: none;
+  box-shadow: 0 10px 30px rgba(180, 108, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35); transition: transform 0.2s var(--ease);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
-.ask:active { transform: scale(0.97); background: #cfcfd4; transition: none; }
+.ask:active { transform: scale(0.97); filter: brightness(0.92); transition: none; }
 .ask.quiet { background: var(--glass); color: var(--ink); border: 1px solid var(--rim); box-shadow: none; -webkit-backdrop-filter: blur(28px) saturate(1.7); backdrop-filter: blur(28px) saturate(1.7); }
 /* The tab thumb rides the page scroll (--p goes 0 to 1 as you swipe), like iOS page indicators. */
 .tabs { touch-action: none; position: relative; display: grid; grid-template-columns: 1fr 1fr; align-self: center; padding: 3px; border-radius: 24px; flex: none; }
@@ -211,12 +302,6 @@ main { position: relative; z-index: 1; height: 100%; }
 .app-label { max-width: 100%; font-size: 12px; font-weight: 500; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .app-tile:active .app-icon { transform: scale(0.92); transition: none; }
 .now-art:has(.art-logo) { height: auto; aspect-ratio: 1; border-radius: 22.5%; }
-/* Apple's app icon corner is a continuous curve (about 22.4% of the width, 60% smoothing), not a
-   circle arc. Measured against that shape: superellipse(1.3) at 26.5% is the closest CSS; 22.5%
-   stays as the plain corner where corner-shape is not supported (Safari today). */
-@supports (corner-shape: superellipse(1.3)) {
-  .app-icon, .now-art:has(.art-logo) { border-radius: 26.5%; corner-shape: superellipse(1.3); }
-}
 .art-logo { width: 100%; height: 100%; display: block; }
 .row-btn.cell { background: rgba(255, 255, 255, 0.1); }
 .row-btn.cell:active { background: rgba(255, 255, 255, 0.18); }

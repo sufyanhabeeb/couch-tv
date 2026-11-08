@@ -41,3 +41,9 @@ platform-tools/
 # Your own home scenes (tv-home/tools/make-scene.py writes them here), and the originals
 tv-home/web/backgrounds/mine/*
 !tv-home/web/backgrounds/mine/.gitkeep
+
+# Windows bridge launcher log
+logs/
+
+# Windows bridge launcher log
+logs/

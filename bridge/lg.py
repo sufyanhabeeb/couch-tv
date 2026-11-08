@@ -445,7 +445,7 @@ class LGTV:
             lid = lp.get("id")
             if not lid:
                 continue
-            points.append({"id": lid, "title": lp.get("title") or lid, "icon": lp.get("icon") or lp.get("largeIcon")})
+            points.append({"id": lid, "title": lp.get("title") or lid, "icon": lp.get("largeIcon") or lp.get("icon")})
             pkg = HOME_PACKAGE if lid == self.app_id else apps.WEBOS_TO_PACKAGE.get(lid) or BY_NAME.get(_plain(lp.get("title")))
             if pkg:
                 found[lid] = pkg
@@ -679,7 +679,18 @@ class LGTV:
             if self.is_on:
                 await self._command("system/turnOff")
             else:
-                await self._request("system/turnOn")   # from Quick Start+ standby
+                # From Quick Start+ standby. Older webOS (4.x) has no system/turnOn ("404 no such
+                # service or method"): then try the screen-on call, and a Wake-on-LAN packet, which
+                # an LG in standby answers when "Mobile TV On, Turn on via Wi-Fi" is on.
+                try:
+                    await self._request("system/turnOn")
+                except LGError as e:
+                    self.log.info("system/turnOn: %s, trying screen on and Wake-on-LAN", e)
+                    try:
+                        await self._request("com.webos.service.tvpower/power/turnOnScreen", {"standbyMode": "active"})
+                    except LGError:
+                        pass
+                    await self.wake()
         elif code in ("VOLUMEUP", "VOLUMEDOWN"):
             await self._request("audio/volumeUp" if code == "VOLUMEUP" else "audio/volumeDown")
         elif code == "MUTE":
@@ -695,6 +706,11 @@ class LGTV:
 
     async def set_mute(self, on):
         await self._request("audio/setMute", {"mute": bool(on)})
+        await self._read_volume()
+
+    async def set_volume(self, level):
+        """Straight to a level (0 to 100), for the phone's volume slider."""
+        await self._request("audio/setVolume", {"volume": max(0, min(100, int(level)))})
         await self._read_volume()
 
     async def _launch(self, lg_id, content_id=None, params=None, quiet=True):

@@ -55,6 +55,7 @@ export const api = {
   ask: (text, who) => call('POST', '/api/ask', { text, who }, 90000),
   power: (state) => call('POST', '/api/power', { state }, 40000),
   volume: (action, steps) => call('POST', '/api/volume', steps ? { action, steps } : { action }),
+  volumeLevel: (level) => call('POST', '/api/volume', { level }),
   setSleep: (minutes) => call('POST', '/api/sleep', { minutes }),
   openScreen: (id) => call('POST', '/api/screens/open', { id }),
   tvs: () => call('GET', '/api/tvs'),

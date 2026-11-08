@@ -72,8 +72,16 @@
   // LG's own parts (live TV, inputs, settings, the store, Developer Mode) are not shown on the home.
   var SYSTEM = /^(com\.webos\.|com\.palm\.|com\.lge\.|com\.palmdts\.)/;
   var byPkg = {}, shown = [];
+  // LG Content Store plays the part of Android's Play Store: the home shows it as the App Store
+  // tile, first in More apps, so new apps can be installed from the TV remote.
+  var LG_STORE = "com.webos.app.discovery", STORE_PKG = "com.android.vending";
   lgApps.forEach(function (a) {
     if (a.id === SELF) return;
+    if (a.id === LG_STORE && !byPkg[STORE_PKG]) {
+      byPkg[STORE_PKG] = a;
+      shown.push({ package: STORE_PKG, label: "App Store" });
+      return;
+    }
     var pkg = byLg[a.id] || byName[plain(a.title)];
     if (pkg && !byPkg[pkg]) {
       byPkg[pkg] = a;

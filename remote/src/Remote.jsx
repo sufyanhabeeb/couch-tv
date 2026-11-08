@@ -317,28 +317,78 @@ function useRepeat(fn) {
   };
 }
 
-// The bottom row, in thumb reach: back, home, play or pause, volume. Like Apple's TV Remote.
-export function Controls({ tv, onKey, onVolume }) {
-  const v = tv?.volume;
-  const st = tv?.playing?.state;
+// Volume: a slider to drag straight to a level (when the TV reports one), with mute and fine
+// - / + steps either side. While a finger is on it, the slider shows the finger, not the TV,
+// and for a moment after, so it never jumps back while the TV catches up.
+const clamp100 = (n) => Math.max(0, Math.min(100, Math.round(n)));
+function VolumeBar({ v, onVolume, onLevel }) {
   const upR = useRepeat(() => onVolume('up'));
   const downR = useRepeat(() => onVolume('down'));
+  const track = useRef(null);
+  const st = useRef({ id: null, sent: 0, timer: null, hold: null });
+  const [local, setLocal] = useState(null);
+  useEffect(() => () => { clearTimeout(st.current.timer); clearTimeout(st.current.hold); }, []);
+  const known = Boolean(v?.known);
+  const level = local ?? (known ? v.level : 0);
+  const muted = Boolean(v?.muted);
+
+  const send = (n, now) => {
+    const s = st.current;
+    clearTimeout(s.timer);
+    const go = () => { s.sent = Date.now(); onLevel(n); };
+    if (now || Date.now() - s.sent > 140) go(); else s.timer = setTimeout(go, 140);
+  };
+  const at = (e) => { const r = track.current.getBoundingClientRect(); return clamp100(((e.clientX - r.left) / r.width) * 100); };
+  const settle = () => { clearTimeout(st.current.hold); st.current.hold = setTimeout(() => setLocal(null), 1500); };
+  const down = (e) => {
+    if (!known || !e.isPrimary) return;
+    track.current.setPointerCapture(e.pointerId);
+    st.current.id = e.pointerId; clearTimeout(st.current.hold);
+    const n = at(e); setLocal(n); send(n); tick();
+  };
+  const move = (e) => { if (st.current.id !== e.pointerId) return; const n = at(e); if (n !== local) { setLocal(n); send(n); } };
+  const up = (e) => { if (st.current.id !== e.pointerId) return; st.current.id = null; const n = at(e); setLocal(n); send(n, true); settle(); tick(); };
+  const key = (e) => {
+    const step = { ArrowRight: 2, ArrowUp: 2, ArrowLeft: -2, ArrowDown: -2 }[e.key];
+    if (!step || !known) return;
+    e.preventDefault(); const n = clamp100(level + step); setLocal(n); send(n, true); settle();
+  };
+
   return (
-    <div className="controls">
-      <button className="round big glass" aria-label={t('back')} onClick={() => { tick(); onKey('back'); }}><Ic.Back /></button>
-      <button className="round big glass" aria-label={t('home')} onClick={() => { tick(); onKey('home'); }}><Ic.Home /></button>
-      <button className="round big glass" aria-label={st === 'playing' ? t('pause') : st === 'paused' ? t('play') : t('play_pause')}
-        onClick={() => { tick(); onKey('play_pause'); }}>
-        {st === 'playing' ? <Ic.Pause /> : st === 'paused' ? <Ic.Play /> : <Ic.PlayPause />}
+    <div className={`volbar glass ${muted ? 'is-muted' : ''}`} role="group" aria-label={t('volume')}>
+      <button className="vol-btn" aria-label={muted ? 'Unmute' : 'Mute'} onClick={() => { tick(); onVolume('mute'); }}>
+        {muted ? <Ic.Muted size={22} /> : <Ic.Speaker size={22} />}
       </button>
-      <div className="volume glass" role="group" aria-label={t('volume')}>
-        <button aria-label="Volume down" {...downR}><Ic.Minus /></button>
-        <button className="vol-mid" aria-label={v?.muted ? 'Unmute' : 'Mute'} onClick={() => { tick(); onVolume('mute'); }}>
-          {v?.muted ? <Ic.Muted size={20} /> : <Ic.Speaker size={20} />}
-          {(v?.muted || v?.known) && <span>{v?.muted ? t('muted') : v.level}</span>}
+      <button className="vol-btn" aria-label="Volume down" {...downR}><Ic.Minus size={20} /></button>
+      {known ? (
+        <div ref={track} className="vol-track" role="slider" tabIndex={0} aria-label={t('volume')}
+          aria-valuemin={0} aria-valuemax={100} aria-valuenow={level}
+          onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onKeyDown={key}>
+          <div className="vol-rail"><div className="vol-fill" style={{ width: `${level}%` }} /></div>
+          <div className="vol-knob" style={{ left: `${level}%` }}><span>{muted ? '–' : level}</span></div>
+        </div>
+      ) : (
+        <span className="vol-unknown">{muted ? t('muted') : t('volume')}</span>
+      )}
+      <button className="vol-btn" aria-label="Volume up" {...upR}><Ic.Plus size={20} /></button>
+    </div>
+  );
+}
+
+// The bottom of the remote, in thumb reach: back, home, play or pause, then the volume slider.
+export function Controls({ tv, onKey, onVolume, onVolumeLevel }) {
+  const st = tv?.playing?.state;
+  return (
+    <div className="controls-wrap">
+      <div className="controls">
+        <button className="pillbtn glass" aria-label={t('back')} onClick={() => { tick(); onKey('back'); }}><Ic.Back /></button>
+        <button className="pillbtn glass" aria-label={t('home')} onClick={() => { tick(); onKey('home'); }}><Ic.Home /></button>
+        <button className="pillbtn glass" aria-label={st === 'playing' ? t('pause') : st === 'paused' ? t('play') : t('play_pause')}
+          onClick={() => { tick(); onKey('play_pause'); }}>
+          {st === 'playing' ? <Ic.Pause /> : st === 'paused' ? <Ic.Play /> : <Ic.PlayPause />}
         </button>
-        <button aria-label="Volume up" {...upR}><Ic.Plus /></button>
       </div>
+      <VolumeBar v={tv?.volume} onVolume={onVolume} onLevel={onVolumeLevel} />
     </div>
   );
 }
