@@ -102,11 +102,10 @@ WEBOS = {
     # there is "Spotify – Música y podcasts", so a name would miss it.
     "apple-tv": {"ids": ["com.apple.appletv"], "names": ["Apple TV", "Apple TV+"]},
     "hbo-max": {"ids": ["com.wbd.stream"]},
-    "spotify": {"ids": ["spotify-beehive"]},
+    "spotify": {"ids": ["spotify-beehive"], "names": ["Spotify - Music and Podcasts"]},
     "abc-iview": {"ids": [], "names": ["ABC iview", "iview"]},
     "sbs-on-demand": {"ids": [], "names": ["SBS On Demand"]},
     "settings": {"ids": ["com.palm.app.settings"]},
-    "spotify": {"ids": ["spotify-beehive"], "names": ["Spotify - Music and Podcasts"]},
 }
 
 BY_ID = {a["id"]: a for a in APPS}
