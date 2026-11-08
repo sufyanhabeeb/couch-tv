@@ -874,6 +874,77 @@ async def h_volume(request):
     return ok(volume=tv.volume)
 
 
+# ---------- the watch: one endpoint for Apple Shortcuts (docs/WATCH.md) ----------
+# POST /api/watch {"do": "Volume up"} (any case, spaces and punctuation ignored), or
+# {"do": "ask", "text": "..."}. Answers in a few words of plain text, for the watch's screen.
+WATCH_KEYS = {"play": "play", "pause": "pause", "playpause": "play_pause", "back": "back",
+              "ok": "ok", "select": "ok", "home": "home", "up": "up", "down": "down",
+              "left": "left", "right": "right", "rewind": "rewind", "forward": "fast_forward",
+              "fastforward": "fast_forward", "stop": "stop"}
+WATCH_VOL_STEPS = 3
+
+
+def _watch_said(vol):
+    if not vol or not vol.get("known"):
+        return "Done"
+    return "Muted" if vol.get("muted") else f"Volume {round((vol.get('level') or 0) * 100 / (vol.get('max') or 100))}"
+
+
+async def h_watch(request):
+    say = "Done"
+    try:
+        data = await body(request)
+        do = re.sub(r"[^a-z]", "", str(data.get("do") or "").lower())
+        if do in ("volumeup", "louder", "up3"):
+            tv.require()
+            for _ in range(WATCH_VOL_STEPS):
+                await tv.key("volume_up")
+                await asyncio.sleep(0.08)
+            await asyncio.sleep(0.4)
+            say = _watch_said(tv.volume)
+        elif do in ("volumedown", "quieter", "softer"):
+            tv.require()
+            for _ in range(WATCH_VOL_STEPS):
+                await tv.key("volume_down")
+                await asyncio.sleep(0.08)
+            await asyncio.sleep(0.4)
+            say = _watch_said(tv.volume)
+        elif do == "mute":
+            tv.require()
+            if hasattr(tv, "set_mute") and tv.volume["known"]:
+                await tv.set_mute(not tv.volume["muted"])
+            else:
+                await tv.key("mute")
+            await asyncio.sleep(0.4)
+            say = _watch_said(tv.volume)
+        elif do in WATCH_KEYS:
+            tv.require()
+            await tv.key(WATCH_KEYS[do])
+            say = {"play": "Playing", "pause": "Paused"}.get(do, "Done")
+        elif do in ("power", "tvon", "tvoff", "on", "off"):
+            if do in ("tvon", "on") or (do == "power" and not tv.is_on):
+                await power_on()
+                say = "TV on" if tv.is_on else "TV didn't wake"
+            else:
+                tv.require()
+                await tv.key("power")
+                say = "TV off"
+        elif do == "ask":
+            text = str(data.get("text") or "").strip()
+            if not text:
+                return web.Response(text="I didn't catch that", content_type="text/plain")
+            if not config.ASK_ENABLED:
+                return web.Response(text="Ask is switched off", content_type="text/plain")
+            result = await claude.ask(text, store.norm_who(data.get("who")) or cur_who(), asks, _current.get())
+            say = result.get("say") or result.get("reply") or "Done"
+        else:
+            return web.Response(status=400, text=f"Unknown: {data.get('do') or 'nothing'}", content_type="text/plain")
+    except ApiError as e:
+        return web.Response(status=e.status, text=str(e.message), content_type="text/plain")
+    record_action(request, "watch", {"do": do}, True)
+    return web.Response(text=say, content_type="text/plain")
+
+
 async def h_screenshot(request):
     png = await tv.screenshot()
     return web.Response(body=png, content_type="image/png", headers={"Cache-Control": "no-store"})
@@ -2442,6 +2513,7 @@ def make_app():
     r.add_post("/api/screens/open", h_screens_open)
     r.add_post("/api/power", h_power)
     r.add_post("/api/volume", h_volume)
+    r.add_post("/api/watch", h_watch)
     r.add_get("/api/screenshot", h_screenshot)
     agentic.routes(r)
     r.add_route("OPTIONS", "/api/{tail:.*}", h_options)

@@ -693,6 +693,7 @@ class LGTV:
                     await self.wake()
         elif code in ("VOLUMEUP", "VOLUMEDOWN"):
             await self._request("audio/volumeUp" if code == "VOLUMEUP" else "audio/volumeDown")
+            await self._read_volume()   # so the phone and the watch show the new level straight away
         elif code == "MUTE":
             await self.set_mute(not self._vol.get("muted"))
         else:
