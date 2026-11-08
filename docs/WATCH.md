@@ -76,6 +76,50 @@ seconds.
 The first time, the watch or the iPhone may ask to allow Shortcuts to connect to the bridge's
 address: tap **Allow**.
 
+## The watch app (real crown control)
+
+`watch/` is a small Apple Watch app: turn the crown and the volume follows as you turn, tap the dial
+to mute, Back, Play and Pause below it, and an Ask button that takes your voice. The ⋯ button has the
+arrows, OK, Home, Power and the bridge's address.
+
+Apple only builds watch apps on a Mac, so this repository builds it on GitHub's Macs instead
+(`.github/workflows/watch.yml`). Every push builds it for the watch simulator, which needs no Apple account.
+Getting it onto your own watch goes through TestFlight, and that needs a paid **Apple Developer Program**
+membership (US$99 a year). Once, in this order:
+
+1. **Join the Apple Developer Program** with your Apple ID: developer.apple.com/programs/enroll. Approval can
+   take up to two days. Then note your **Team ID** (developer.apple.com/account, Membership details).
+2. **Register the app's id.** developer.apple.com/account, Certificates, Identifiers and Profiles,
+   Identifiers, **+**, App IDs, App. Description `Couch TV Watch`, Bundle ID **Explicit**, for example
+   `com.yourname.couchtv.watch`. No capabilities needed. Continue, Register.
+3. **Make the app in App Store Connect.** appstoreconnect.apple.com, Apps, **+**, New App. Platform **iOS**
+   (watch-only apps live there), a name nobody else uses on the App Store (for example
+   `Couch TV Watch Yourname`), the bundle id from step 2, any SKU, Full Access. It is never published:
+   TestFlight is private to you.
+4. **Make an API key for the build.** App Store Connect, Users and Access, Integrations, App Store Connect API,
+   Team Keys, **+**. Name `couch-tv watch build`, access **Admin** (it lets the build make its own
+   signing certificate). Download the `.p8` file (Apple lets you download it only once) and note the
+   **Key ID** and the **Issuer ID** shown above the list.
+5. **Give the key to your fork, yourself.** In a terminal, with `gh` signed in (each command asks you to
+   paste the value, or reads the file):
+
+   ```
+   gh secret set ASC_KEY_ID -R <you>/couch-tv
+   gh secret set ASC_ISSUER_ID -R <you>/couch-tv
+   Get-Content "$HOME\Downloads\AuthKey_XXXXXXXXXX.p8" -Raw | gh secret set ASC_KEY_P8 -R <you>/couch-tv
+   gh variable set APPLE_TEAM_ID -R <you>/couch-tv --body "<Team ID>"
+   gh variable set WATCH_BUNDLE_ID -R <you>/couch-tv --body "com.yourname.couchtv.watch"
+   gh variable set BRIDGE_URL -R <you>/couch-tv --body "http://<bridge address>:5400"
+   ```
+
+   (On a Mac or Linux: `gh secret set ASC_KEY_P8 -R <you>/couch-tv < ~/Downloads/AuthKey_XXXXXXXXXX.p8`.)
+   Secrets are never shown again, not even to you, and never appear in the build's log.
+6. **Build and upload.** GitHub, your fork, Actions, **watch app**, Run workflow, tick
+   **Sign and upload to TestFlight**. About ten minutes, then Apple takes 10 to 30 minutes to process it.
+7. **Install it.** App Store Connect, your app, TestFlight, Internal Testing, **+**, add yourself. On the
+   iPhone, install **TestFlight** from the App Store and accept the invite; Couch TV installs on the
+   watch. A TestFlight build lasts 90 days: run step 6 again for a fresh one.
+
 ## What the watch can send
 
 `POST /api/watch` with JSON `{"do": "..."}`. Case, spaces and punctuation are ignored. The answer is a few
