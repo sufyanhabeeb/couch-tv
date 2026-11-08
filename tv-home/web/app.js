@@ -34,9 +34,17 @@
   // Glass panels ("off", "on", or "lite": no blur, for slower TVs) and the video background, from
   // Home settings, then home.glass and home.video_url. Both are off unless someone switches them on.
   var GLASS = "off", GLASS_ICONS = false, VIDEO_ON = false, VIDEO_URL = "";
+  // How clear the glass is, 1 (frosted) to 5 (very clear), and the Night clock's style ("frosted",
+  // the photo's frosted copy, or "liquid", clear glass digits): Home settings, Look, else
+  // home.glass_amount and home.clock_style (#25, #29).
+  var GLASS_AMT = 3, CLOCK_LIQUID = false;
   // Home settings made on this TV with the gear tile (see "home settings" below). They win over
   // config.js. ST is the saved object; the rest are read from it in readConfig().
   var ST = {}, WX_SHOW = true, WX_F = false, WX_EVERY = 30, HIDDEN_TV = [];
+  // Now playing (#31), on unless switched off; the navigation sound: system, soft or off (#32)
+  var NP_ON = true, SOUND_STYLE = "system";
+  // glass app icons: the focused app in its own colours, or staying glass (#32)
+  var GLASS_FOCUS = "colour";
   // WebViews before Chrome 84 (still on many Android 9 TVs) skip gap in a flex box, so icons touch
   // their words and rows touch each other. html.no-flex-gap lets app.css put margins in instead (#26).
   (function () {
@@ -107,6 +115,12 @@
     network: '<svg viewBox="0 0 24 24"><path d="M2.5 9a14 14 0 0 1 19 0M5.7 12.5a9.5 9.5 0 0 1 12.6 0M8.9 16a4.8 4.8 0 0 1 6.2 0"/><circle cx="12" cy="19.3" r="1"/></svg>',
     store: '<svg viewBox="0 0 24 24"><path d="M5 8h14l-1.2 11.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8z"/><path d="M9 10.5V7a3 3 0 0 1 6 0v3.5"/></svg>',
     check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+    // Now playing's buttons (filled shapes)
+    prev: '<svg viewBox="0 0 24 24" class="solid"><path d="M7 6h2v12H7zM20 6v12l-9-6z"/></svg>',
+    next: '<svg viewBox="0 0 24 24" class="solid"><path d="M15 6h2v12h-2zM4 6v12l9-6z"/></svg>',
+    play: '<svg viewBox="0 0 24 24" class="solid"><path d="M7 5v14l12-7z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" class="solid"><path d="M6.5 5h4v14h-4zM13.5 5h4v14h-4z"/></svg>',
+    note: '<svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>',
     updown: '<svg viewBox="0 0 24 24"><path d="M8 9.5l4-4 4 4M8 14.5l4 4 4-4"/></svg>',
     sliders: '<svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>',
     chevron: '<svg viewBox="0 0 24 24"><path d="M9.5 5.5 16 12l-6.5 6.5"/></svg>',
@@ -213,7 +227,14 @@
     document.documentElement.classList.toggle("glass-lite", GLASS === "lite");
     // glass app icons (#25): set in Home settings, else home.glass_icons; off unless switched on
     GLASS_ICONS = typeof ST.glass_icons === "boolean" ? ST.glass_icons : HOME.glass_icons === true;
+    NP_ON = typeof ST.now_playing === "boolean" ? ST.now_playing : HOME.now_playing !== false;
+    GLASS_FOCUS = (ST.glass_focus || HOME.glass_focus) === "glass" ? "glass" : "colour";
+    document.documentElement.classList.toggle("gi-stay", GLASS_FOCUS === "glass");
+    SOUND_STYLE = ["system", "soft", "off"].indexOf(ST.nav_sound || HOME.nav_sound) >= 0 ? (ST.nav_sound || HOME.nav_sound) : "system";
     document.documentElement.classList.toggle("glass-icons", GLASS_ICONS);
+    GLASS_AMT = glassAmount();
+    CLOCK_LIQUID = (ST.clock_style || HOME.clock_style) === "liquid";
+    glassClasses();
     // a link set in Home settings wins over home.video_url; one from config.json alone means on
     VIDEO_URL = typeof ST.video_url === "string" ? ST.video_url : typeof HOME.video_url === "string" ? HOME.video_url : "";
     VIDEO_ON = !!VIDEO_URL && (typeof ST.video === "boolean" ? ST.video : true);
@@ -238,6 +259,15 @@
     newApps = kept("tvhome.apps.new") || [];
   }
   function lookSetting() { return ST.look || kept("tvhome.look") || HOME.look || "night"; }
+  function glassAmount() {
+    var n = parseInt(ST.glass_amount != null ? ST.glass_amount : HOME.glass_amount, 10);
+    return n >= 1 && n <= 5 ? n : 3;
+  }
+  function glassClasses() {
+    var r = document.documentElement;
+    for (var i = 1; i <= 5; i++) r.classList.toggle("ga-" + i, GLASS_AMT === i);
+    if (r.classList.contains("clock-liquid") !== CLOCK_LIQUID) { r.classList.toggle("clock-liquid", CLOCK_LIQUID); glassShown = ""; }
+  }
   function glassSetting() { var g = ST.glass || HOME.glass; return g === "on" || g === "lite" ? g : "off"; }
   // no clock in Home settings or config.json: the one usual for the language (24 hour in Italian and German)
   function clock24() { return (ST.clock || HOME.clock || (window.I18N ? window.I18N.clock() : "12h")) === "24h"; }
@@ -526,10 +556,21 @@
     var cs = el.querySelectorAll(".gclock");
     for (var k = 0; k < cs.length; k++) {
       var c = cs[k];
-      c.innerHTML = '<span class="fill">' + hm + '</span><span class="sheen">' + hm + '</span><span class="rim">' + hm + "</span>";
-      var f = c.firstChild;
-      f.style.backgroundImage = s.src ? cssUrl(s.src) : "url(backgrounds/" + s.photo + (s.glass ? "-glass" : "") + ".jpg)";
-      f.style.backgroundPosition = -(c.offsetLeft + f.offsetLeft) + "px " + -(c.offsetTop + f.offsetTop) + "px";
+      c.innerHTML = '<span class="edge">' + hm + '</span><span class="fill">' + hm + '</span><span class="sheen">' + hm + '</span><span class="rim">' + hm + "</span>";
+      var f = c.querySelector(".fill"), ex = c.offsetLeft + f.offsetLeft, ey = c.offsetTop + f.offsetTop;
+      if (CLOCK_LIQUID) {
+        // Liquid glass (#25): the sharp photo seen through the digits, magnified LENS times about
+        // the clock's middle, the way a thick clear glass bends what is behind it. Clear amounts
+        // 1 and 2 use the frosted copy instead, so the glass reads as frosted.
+        var cx = c.offsetLeft + c.offsetWidth / 2, cy = c.offsetTop + c.offsetHeight / 2, LENS = 1.07;
+        var frost = GLASS_AMT <= 2 && s.glass && !s.src;
+        f.style.backgroundImage = s.src ? cssUrl(s.src) : "url(backgrounds/" + s.photo + (frost ? "-glass" : "") + ".jpg)";
+        f.style.backgroundSize = LENS * 100 + "vw " + LENS * 100 + "vh";
+        f.style.backgroundPosition = (-ex - (LENS - 1) * cx) + "px " + (-ey - (LENS - 1) * cy) + "px";
+      } else {
+        f.style.backgroundImage = s.src ? cssUrl(s.src) : "url(backgrounds/" + s.photo + (s.glass ? "-glass" : "") + ".jpg)";
+        f.style.backgroundPosition = -ex + "px " + -ey + "px";
+      }
     }
     if (s.water) {   // above the waterline sharp, below it the blurred reflection
       // The digits hang below the clock's box (its line height is tight), so the clips reach past
@@ -753,6 +794,54 @@
     el.classList.add("on");
   }
 
+  // ---------------- Now playing (#31) ----------------
+  // The song any app is playing behind the home (Spotify, YouTube Music, ...): its title, artist and
+  // cover, with previous, play or pause and next. The bridge or the on-TV app reads it from the TV's
+  // media sessions (/api/music) every 5 s while the home is on screen; the buttons are the remote's
+  // media keys. A paused song stays for ten minutes so play can start it again. No computer and no
+  // on-TV app (option A): Android lets no ordinary app read other apps' sessions, so no card.
+  var music = null, npI = 1;
+  function npVisible() { return NP_ON && !!music && !OFFLINE; }
+  // reachable with the remote: in the Night look it steps aside with the cards while More apps is open
+  function npReach() { return npVisible() && !(NIGHT && expanded); }
+  function renderNp() {
+    var el = $("np"), on = npVisible();
+    el.classList.toggle("on", on);
+    if (NIGHT) {
+      // the row shows while someone has a show on the go, or while a song plays
+      var anyone = PEOPLE.some(function (p) { return (data.showsBy[p.id] || []).length; });
+      $("shelf-section").classList.toggle("empty", !anyone && !on);
+      $("np-slot").classList.toggle("on", on);
+    }
+    if (!on) { el.innerHTML = ""; return; }
+    var playing = music.state === "playing";
+    // the cover from the bridge (Apple's music search); none yet, or none found: a music note
+    var art = music.art ? '<img class="np-art" src="' + esc(music.art) + '" alt="" decoding="async" onerror="this.className=\'np-art gone\'">' :
+      '<span class="np-art">' + ICONS.note + "</span>";
+    var btns = [["prev", t("np_prev")], [playing ? "pause" : "play", playing ? t("np_pause") : t("np_play")], ["next", t("np_next")]];
+    el.innerHTML = art + '<div class="np-t"><span class="np-app">' + esc((music.app && music.app.name) || t("np_head")) + "</span>" +
+      "<b>" + esc(music.title) + "</b><small>" + esc(music.artist || music.album || "") + "</small></div>" +
+      '<div class="np-ctl">' + btns.map(function (b, i) {
+        return '<span class="nb' + (zone === "np" && i === npI ? " focus" : "") + '" role="button" aria-label="' + esc(b[1]) + '">' + ICONS[b[0]] + "</span>";
+      }).join("") + "</div>";
+  }
+  function refreshMusic() {
+    if (!NP_ON || OFFLINE || document.hidden) { if (music) { music = null; renderNp(); } return; }
+    api("GET", "/api/music", null, 5000).then(function (j) {
+      var had = !!music;
+      music = j.music || null;
+      renderNp();
+      if (had !== !!music && zone === "np" && !music) paintFocus();   // the card went away under the focus
+    }, function () { if (music) { music = null; renderNp(); if (zone === "np") paintFocus(); } });
+  }
+  function npPress() {
+    if (!music) return;
+    var key = ["previous", "play_pause", "next"][npI];
+    if (key === "play_pause") { music.state = music.state === "playing" ? "paused" : "playing"; renderNp(); }   // straight away
+    api("POST", "/api/key", { key: key }).catch(function (e) { note(e.message); });
+    setTimeout(refreshMusic, key === "play_pause" ? 1500 : 900);
+  }
+
   // ---------------- quick buttons: from tvs[].quick in config.json, in that order ----------------
   // sleep: the sleep timer. picture: flip between the TV's two picture modes. look: Night scenes or
   // Classic. input: the TV's input list. A button that cannot work right now is left out (no bridge
@@ -824,6 +913,7 @@
     if (qi >= vis.length) qi = Math.max(0, vis.length - 1);
     fitDate();
   }
+  // a short list straight under the Sleep timer button (#33, thanks alonmustafa), up and down to choose
   function renderMenu() {
     var menu = $("sleep-menu");
     menu.innerHTML = SLEEP_CHOICES.map(function (c, i) {
@@ -834,8 +924,10 @@
     var m = minutesLeft();
     menuI = m ? SLEEP_CHOICES.length - 1 : 1;   // a timer is running: start on Off; otherwise 30 min
     zone = "menu";
-    $("sleep-menu").classList.add("on");
+    var menu = $("sleep-menu"), btn = $("q-sleep");
+    menu.classList.add("on");
     renderMenu();
+    if (btn) menu.style.right = Math.max(0, $("quick").getBoundingClientRect().right - btn.getBoundingClientRect().right) + "px";
   }
   function closeMenu() {
     $("sleep-menu").classList.remove("on");
@@ -875,10 +967,73 @@
   // The TV's own input list (HDMI, a console, a set top box): the TV_INPUT key through the bridge,
   // or straight from the launcher when there is no bridge (only where the TV has such a screen).
   function openInputs() {
+    // the TV lists its inputs: couch-tv's own menu, each one opening straight away (#30)
+    var list = inputList();
+    if (list.length) { openInputMenu(list); return; }
     var native = function () { try { return !!(TV && TV.openInputs && TV.openInputs()); } catch (e) { return false; } };
     if (OFFLINE) { if (!native()) note(t("no_inputs")); return; }
     api("POST", "/api/key", { key: "input" })
       .catch(function (e) { if (!native()) note(e.message); });
+  }
+  // ---------------- the Input menu (#30) ----------------
+  // The TV's own inputs, read by the launcher from Android's TV input list (TVOS.tvInputs): each HDMI
+  // port by the TV's own name for it (ARC or eARC only where that label says so; Android has no public
+  // way to read it), the devices HDMI-CEC found behind it, then Bluetooth and Network. A TV that lists
+  // no inputs keeps its own input screen. ?mock=1&inputs=4 stands in four ports for a preview.
+  var inI = 0, inItems = [];
+  function inputList() {
+    try {
+      if (TV && TV.tvInputs) return JSON.parse(TV.tvInputs()) || [];
+      if (window.MOCK_INPUTS) return window.MOCK_INPUTS;
+    } catch (e) {}
+    return [];
+  }
+  function openInputMenu(list) {
+    inItems = list.map(function (x) {
+      var kind = x.type === "hdmi" ? "HDMI" : t("input");
+      var sub = (x.devices || []).join(", ");
+      return { act: "input", id: x.id, icon: ICONS.input, label: x.label || kind, sub: sub };
+    });
+    if ((TV && TV.openSettingsScreen) || ON_TV || window.MOCK_INPUTS) {
+      inItems.push({ act: "bluetooth", icon: ICONS.bluetooth, label: t("bluetooth"), sub: t("bt_sub") });
+      inItems.push({ act: "network", icon: ICONS.network, label: t("network"), sub: t("net_sub") });
+    }
+    inI = 0; zone = "inputs";
+    renderInputMenu();
+  }
+  function renderInputMenu() {
+    var pop = $("inputs-pop");
+    pop.innerHTML = inItems.map(function (it, i) {
+      return '<div class="grow' + (i === inI ? " focus" : "") + '" role="menuitem"><i>' + it.icon + "</i><span><b>" + esc(it.label) +
+        "</b>" + (it.sub ? "<small>" + esc(it.sub) + "</small>" : "") + "</span></div>";
+    }).join("");
+    pop.classList.add("on");
+    hintFlash = t("inputs_hint"); renderHint();
+    // under the Input button, kept inside the screen's safe area
+    var el = quickEls[qi], rem = innerWidth / 120;
+    if (el) {
+      var b = el.getBoundingClientRect(), w = pop.offsetWidth;
+      pop.style.left = Math.max(5 * rem, Math.min(innerWidth - w - 5 * rem, b.right - w)) + "px";
+      pop.style.top = Math.max(3.75 * rem, Math.min(innerHeight - pop.offsetHeight - 3.75 * rem, b.bottom + 1.25 * rem)) + "px";
+    }
+  }
+  function closeInputMenu() {
+    $("inputs-pop").classList.remove("on");
+    hintFlash = "";
+    if (zone === "inputs") zone = "quick";
+  }
+  function doInputMenu() {
+    var it = inItems[inI];
+    closeInputMenu();
+    if (!it) return;
+    if (it.act === "input") {
+      var done = false;
+      try { done = !!(TV && TV.openInput && TV.openInput(it.id)); } catch (e) {}
+      if (!done) note(window.MOCK_INPUTS ? t("opening", { title: it.label }) : t("no_inputs"));
+      return;
+    }
+    if (TV && TV.openSettingsScreen) { try { TV.openSettingsScreen(it.act); } catch (e) {} }
+    else if (ON_TV) openSettingsScreen(it.act);
   }
   // The TV's Bluetooth or network settings, opened by the on-TV app (Tv.openSettingsScreen).
   function openSettingsScreen(which) {
@@ -990,16 +1145,20 @@
     renderPeople();
   }
 
+  // Keep watching shows up to ten per person; the row slides along under the remote.
+  var KEEP_MAX = 10;
   function renderShelf() {
     var track = $("shelf");
-    data.shows = data.showsBy[who] || [];
+    data.shows = (data.showsBy[who] || []).slice(0, KEEP_MAX);
+    // Night look: the first three to keep watching, then this week's picks, one card at a time
     var picks = NIGHT ? pickList() : [];
     if (NIGHT) data.shows = data.shows.slice(0, 3).concat(picks);
     if (s >= data.shows.length) s = 0;
     var anyone = picks.length > 0 || PEOPLE.some(function (p) { return (data.showsBy[p.id] || []).length; });
-    // nobody has anything on the go: no empty box, the photo has the space
-    $("shelf-section").classList.toggle("empty", !anyone);
-    $("people").classList.toggle("empty", !anyone);
+    // nobody has anything on the go: no empty box, the photo has the space (unless Now playing
+    // is up at night). The people switcher stays: with nothing yet (Netflix tells Android nothing on
+    // some TVs, issue #23) it is the only way to say who is watching before anything is played.
+    $("shelf-section").classList.toggle("empty", !anyone && !(NIGHT && npVisible()));
     renderPeople();
     if (!data.shows.length) {
       var name = PEOPLE[whoIndex()].name;
@@ -1367,7 +1526,26 @@
     }
     $("grid").innerHTML = gridItems.map(appHTML).join("");
     gridEls = Array.prototype.slice.call($("grid").children);
+    clearIcons();
     renderHint();
+  }
+
+  // Glass app icons, Apple's clear style (#25): each icon's glyph without its background
+  // (clearicon.js), drawn light on the glass tile. The focused app shows its own icon. An icon that
+  // will not split cleanly keeps the grey version (app.css).
+  function clearIcons() {
+    if (!GLASS_ICONS || !window.ClearIcon) return;
+    Array.prototype.forEach.call($("grid").querySelectorAll(".app .face:not(.tool):not(.word) > img"), function (im) {
+      var face = im.parentNode, src = im.getAttribute("src");
+      if (!src || face.querySelector(".glyph")) return;
+      window.ClearIcon.get(src, function (g) {
+        if (!g || !face.parentNode || face.querySelector(".glyph")) return;
+        var gi = document.createElement("img");
+        gi.className = "glyph"; gi.alt = ""; gi.src = g;
+        face.appendChild(gi);
+        face.classList.add("clear");
+      });
+    });
   }
 
   // ---------------- focus ----------------
@@ -1383,15 +1561,15 @@
     if (NIGHT) { track.style.transform = ""; showCard(); return; }   // one card at a time, fading
     if (!el) { track.style.transform = ""; return; }
     var step = el.offsetWidth + parseFloat(getComputedStyle(track).columnGap || 0);
-    // keep the focused card in view: as many as fit (five on Classic, fewer beside the headlines)
-    var view = Math.max(1, Math.min(5, Math.floor(($("shelf-section").clientWidth + step - el.offsetWidth) / step)));
-    var first = Math.max(0, Math.min(s - Math.floor((view - 1) / 2), shelfEls.length - view));
+    // Classic: as many posters as fit (five, fewer beside the headlines), focus kept centred
+    var fit = Math.max(1, Math.min(5, Math.floor((track.parentNode.clientWidth + step - el.offsetWidth) / step)));
+    var first = Math.max(0, Math.min(s - Math.floor((fit - 1) / 2), shelfEls.length - fit));
     track.style.transform = "translateX(" + (-first * step) + "px)";
   }
 
   function shelfOn() { return !$("shelf-section").classList.contains("empty"); }
-  // the switcher shows for two or more people, and only while someone has something on the go
-  function peopleOn() { return peopleCount() >= 2 && shelfOn(); }
+  // the switcher shows for two or more people, also while nobody has anything yet (issue #23)
+  function peopleOn() { return peopleCount() >= 2; }
   function toPeople() { zone = "people"; pi = whoIndex(); }
 
   function paintFocus() {
@@ -1399,11 +1577,21 @@
     if (zone === "smart") { window.smartHome.paint(); return; }
     clearFocus();
     renderHint();
+    if (npVisible()) renderNp();   // its buttons carry the focus only while zone is "np"
     if (zone === "gear") { if (gridEls[g]) gridEls[g].classList.add("focus"); renderGear(); return; }
     if (zone === "appmenu") { if (gridEls[g]) gridEls[g].classList.add("focus"); renderAppMenu(); return; }
     if (zone === "updask") { renderAsk(); return; }
     if (zone === "menu") { renderMenu(); return; }
+    if (zone === "inputs") { if (quickEls[qi]) quickEls[qi].classList.add("focus"); renderInputMenu(); return; }
     if (zone === "pmenu") { renderPop(); $("people").classList.add("focus"); return; }
+    if (zone === "np") {
+      if (!npReach()) { zone = shelfEls.length ? "shelf" : "grid"; paintFocus(); return; }
+      renderNp();
+      hero(null);
+      $("place").style.visibility = "";
+      showPhoto();
+      return;
+    }
     if (zone === "quick" && quickEls[qi]) {
       quickEls[qi].classList.add("focus");
       hero(null);
@@ -1454,11 +1642,12 @@
     if (zone === "gear") { if (dy) { gi = Math.max(0, Math.min(1, gi + dy)); renderGear(); } return; }
     if (zone === "appmenu") { if (dy) { amI = Math.max(0, Math.min(amItems.length - 1, amI + dy)); renderAppMenu(); } return; }
     if (zone === "updask") { if (dy) { ai = Math.max(0, Math.min(1, ai + dy)); renderAsk(); } return; }
+    if (zone === "inputs") { if (dy) { inI = Math.max(0, Math.min(inItems.length - 1, inI + dy)); renderInputMenu(); } return; }
     if (lift) { moveLift(dx, dy); return; }
     // Night with More apps open: the cards step aside, so up and down skip them
     var cards = NIGHT && expanded ? [] : shelfEls;
     if (zone === "menu") {
-      if (dx) menuI = Math.max(0, Math.min(SLEEP_CHOICES.length - 1, menuI + dx));
+      if (dx || dy) menuI = Math.max(0, Math.min(SLEEP_CHOICES.length - 1, menuI + (dy || dx)));
       paintFocus();
       return;
     }
@@ -1471,12 +1660,36 @@
       }
       return;
     }
+    if (zone === "np") {
+      if (NIGHT) {
+        // the first card of the row: right past the last button goes on to the shows
+        if (dx > 0 && npI === 2) { if (cards.length) { zone = "shelf"; s = 0; } }
+        else if (dx) npI = Math.max(0, Math.min(2, npI + dx));
+        else if (dy < 0) { if (peopleOn()) toPeople(); else if (hasQuick()) { zone = "quick"; qi = 0; } }
+        else if (dy > 0 && gridEls.length) {
+          var nb = $("np").getBoundingClientRect();
+          g = nearestInRow(0, nb.left + nb.width / 2);
+          zone = "grid";
+        }
+      } else {
+        // Classic: top right, under the quick buttons
+        if (dx) npI = Math.max(0, Math.min(2, npI + dx));
+        else if (dy < 0) { if (hasQuick()) zone = "quick"; else if (peopleOn()) toPeople(); }
+        else if (dy > 0) {
+          if (cards.length) zone = "shelf";
+          else { zone = "grid"; g = Math.min(g, gridEls.length - 1); }
+        }
+      }
+      paintFocus();
+      return;
+    }
     if (zone === "quick") {
       var nq = quickVisible().length;
       if (dx < 0 && qi === 0) { if (peopleOn()) toPeople(); }
       else if (dx) qi = Math.max(0, Math.min(nq - 1, qi + dx));
       else if (dy > 0) {
-        if (peopleOn()) toPeople();
+        if (!NIGHT && npReach()) zone = "np";
+        else if (peopleOn()) toPeople();
         else if (cards.length) zone = "shelf";
         else { zone = "grid"; g = Math.min(GRID_COLS, gridEls.length) - 1; }
       }
@@ -1484,15 +1697,16 @@
       return;
     }
     if (zone === "people") {
-      if (dx > 0 && (isHead() || pi === PEOPLE.length - 1)) { if (hasQuick()) { zone = "quick"; qi = 0; } }
+      if (dx > 0 && (isHead() || pi === PEOPLE.length - 1)) { if (hasQuick()) { zone = "quick"; qi = 0; } else if (!NIGHT && npReach()) zone = "np"; }
       else if (dx && !isHead()) {
         // moving across the names only moves the outline; OK picks (you have to click to select), so passing a name on the way to Sleep timer changes nothing
         pi = Math.max(0, Math.min(PEOPLE.length - 1, pi + dx));
-      } else if (dy > 0) zone = cards.length ? "shelf" : "grid";
+      } else if (dy > 0) zone = NIGHT && npReach() ? "np" : cards.length ? "shelf" : "grid";
     } else if (zone === "shelf") {
-      if (dx && NIGHT) s = (s + dx + shelfEls.length) % shelfEls.length;   // the cards go round
+      if (dx < 0 && s === 0 && NIGHT && npReach()) { zone = "np"; npI = 2; }
+      else if (dx && NIGHT) s = (s + dx + shelfEls.length) % shelfEls.length;   // the cards go round
       else if (dx) s = Math.max(0, Math.min(shelfEls.length - 1, s + dx));
-      else if (dy < 0) { if (peopleOn()) toPeople(); else if (hasQuick()) { zone = "quick"; qi = 0; } }
+      else if (dy < 0) { if (peopleOn()) toPeople(); else if (!NIGHT && npReach()) zone = "np"; else if (hasQuick()) { zone = "quick"; qi = 0; } }
       else if (dy > 0 && gridEls.length) {
         // land on the app under the show
         var b = shelfEls[s].getBoundingClientRect();
@@ -1506,6 +1720,7 @@
         if (nx >= 0 && nx < gridEls.length && Math.floor(nx / GRID_COLS) === row) g = nx;
       } else if (dy < 0 && row === 0) {
         if (cards.length) zone = "shelf";
+        else if (npReach()) zone = "np";
         else if (peopleOn()) toPeople();
         else if (hasQuick()) zone = "quick";   // offline the sleep and picture buttons are hidden
       } else if (dy < 0) {
@@ -1533,6 +1748,7 @@
     if (lift) { dropLift(); return; }   // BACK puts a picked-up app down where it is
     if (zone === "pmenu") { if (plift) dropPeople(); else closePop(); paintFocus(); return; }
     if (zone === "menu") { closeMenu(); paintFocus(); return; }   // BACK just closes the sleep choices
+    if (zone === "inputs") { closeInputMenu(); paintFocus(); return; }
     if (expanded) { expanded = false; renderGrid(); }
     startFocus();
     paintFocus();
@@ -1544,7 +1760,7 @@
   function hold() {
     touched = true;
     if (zone === "settings") return setHold();
-    if (zone === "gear" || zone === "smart" || zone === "updask") return false;
+    if (zone === "gear" || zone === "smart" || zone === "updask" || zone === "inputs") return false;
     if (lift) { dropLift(); return true; }
     if (zone === "pmenu") {
       if (plift) dropPeople();
@@ -1564,6 +1780,8 @@
     if (zone === "updask") { answerAsk(ai === 0); return; }
     if (lift) { dropLift(); return; }
     if (zone === "menu") { setSleep(SLEEP_CHOICES[menuI]); paintFocus(); return; }
+    if (zone === "inputs") { doInputMenu(); paintFocus(); return; }
+    if (zone === "np") { npPress(); return; }
     if (zone === "pmenu") {
       if (plift) { dropPeople(); return; }
       pickWho(PEOPLE[pmi].id);
@@ -1949,8 +2167,34 @@
     } });
     rows.push({ kind: "toggle", key: "glass-icons", label: t("glass_icons"), value: GLASS_ICONS ? t("on") : t("off"), act: function () {
       GLASS_ICONS = !GLASS_ICONS; ST.glass_icons = GLASS_ICONS; saveSettings();
+      document.documentElement.classList.toggle("glass-icons", GLASS_ICONS);   // seen straight away
+      clearIcons();
     } });
-    rows.push(info("glass-note", t("glass_note", { keep: t("keep_watching") }) + " " + t("glass_icons_note")));
+    // with glass app icons: the focused app shows its own colours, or stays glass (#32)
+    if (GLASS_ICONS) rows.push({ kind: "cycle", key: "glass-focus", label: t("glass_focus"),
+      value: GLASS_FOCUS === "glass" ? t("glass_focus_glass") : t("glass_focus_colour"), act: function () {
+        GLASS_FOCUS = GLASS_FOCUS === "glass" ? "colour" : "glass"; ST.glass_focus = GLASS_FOCUS; saveSettings();
+        document.documentElement.classList.toggle("gi-stay", GLASS_FOCUS === "glass");   // seen straight away
+      } });
+    // how clear, 1 to 5 (#29): left and right on the row, or OK to step; seen straight away
+    var setAmt = function (n) {
+      n = Math.max(1, Math.min(5, n));
+      if (n === GLASS_AMT) return;
+      GLASS_AMT = n; ST.glass_amount = n; glassClasses(); glassShown = ""; saveSettings();
+    };
+    rows.push({ kind: "slider", key: "glass-amount", label: t("glass_amount"), value: t("glass_amt_" + GLASS_AMT), level: GLASS_AMT,
+      adjust: function (dx) { setAmt(GLASS_AMT + dx); }, act: function () { setAmt(GLASS_AMT === 5 ? 1 : GLASS_AMT + 1); } });
+    // the Night clock: frosted (the photo's frosted copy) or liquid glass (#25)
+    rows.push({ kind: "cycle", key: "clock-style", label: t("clock_style"), value: CLOCK_LIQUID ? t("clock_liquid") : t("clock_frosted"), act: function () {
+      CLOCK_LIQUID = !CLOCK_LIQUID; ST.clock_style = CLOCK_LIQUID ? "liquid" : "frosted"; glassClasses(); saveSettings();
+    } });
+    rows.push(info("glass-note", t("glass_note", { keep: t("keep_watching") }) + " " + t("glass_icons_note") + " " + t("glass_amount_note")));
+    // the sound on every arrow and OK (#32): the TV's own, a softer one, or none
+    rows.push(head(t("sound_head")));
+    rows.push({ kind: "cycle", key: "nav-sound", label: t("nav_sound"), value: t("nav_sound_" + SOUND_STYLE), act: function () {
+      SOUND_STYLE = SOUND_STYLE === "system" ? "soft" : SOUND_STYLE === "soft" ? "off" : "system";
+      ST.nav_sound = SOUND_STYLE; saveSettings(); blip(0, 0);
+    } });
     // the video background: its switch only once there is a link
     rows.push(head(t("video_head")));
     if (VIDEO_URL) {
@@ -1966,6 +2210,12 @@
       ST.video_url = ""; VIDEO_URL = ""; ST.video = false; saveSettings();
     } });
     rows.push(info("video-note", t("video_note")));
+    // Now playing (#31): the card with the song and its buttons; it needs the computer or the on-TV app
+    rows.push(head(t("np_head")));
+    rows.push({ kind: "toggle", key: "now-playing", label: t("np_show"), value: NP_ON ? t("on") : t("off"), act: function () {
+      NP_ON = !NP_ON; ST.now_playing = NP_ON; saveSettings(); refreshMusic();
+    } });
+    rows.push(info("np-note", t(OFFLINE ? "np_note_offline" : "np_note")));
     rows.push(head(t("photos_head")));
     if (canPick()) rows.push({ kind: "action", key: "photo-pick", label: t("photos_pick"), sub: t("photos_pick_sub"), act: pickPhotos });
     else rows.push(info("photo-nopick", t("photos_no_pick"), "", t("photos_no_pick_sub")));
@@ -2440,6 +2690,9 @@
     } else if (dy) {
       SET.ri = stepRow(rows, SET.ri, dy);
       SET.keyFocus = rows[SET.ri] ? rows[SET.ri].key : null;
+    } else if (dx && rows[SET.ri] && rows[SET.ri].adjust) {
+      rows[SET.ri].adjust(dx);
+      SET.keyFocus = rows[SET.ri].key;
     } else if (dx < 0) leaveRows();
     renderSettings();
   }
@@ -2496,6 +2749,10 @@
     else if (r.kind === "choice") tail = r.checked ? '<i class="smark">' + ICONS.check + "</i>" : "";
     else if (r.kind === "check") tail = '<i class="sbox' + (r.checked ? " on" : "") + '">' + (r.checked ? ICONS.check : "") + "</i>";
     else if (r.kind === "nav" || r.kind === "input") tail = '<i class="smark dim">' + ICONS.chevron + "</i>";
+    else if (r.kind === "slider") {
+      for (var lv = 1; lv <= 5; lv++) tail += '<i class="sstep' + (lv <= r.level ? " on" : "") + '"></i>';
+      tail = '<span class="sslide">' + tail + "</span>";
+    }
     var value = r.value != null && r.value !== "" ? '<span class="sv">' + esc(r.value) + "</span>" : "";
     var sub = r.sub ? "<small>" + esc(r.sub) + "</small>" : "";
     return '<div class="' + cls + '"' + (r.lang ? ' lang="' + esc(r.lang) + '"' : "") + ">" + lead +
@@ -2526,7 +2783,7 @@
     $("set-msg").textContent = SET.msg || "";
     var cur = rows[SET.ri];
     $("set-hint").textContent = SET.typing ? t("hint_typing") : SET.lift ? t("hint_lift") : SET.col === "secs" ? t("hint_secs") :
-      cur && cur.move ? t("hint_rows_move") : t("hint_rows");
+      cur && cur.move ? t("hint_rows_move") : SET.col === "rows" && cur && cur.adjust ? t("hint_slider") : t("hint_rows");
     // keep the focused row well inside the list (a quarter of it from either edge), scrolling only
     // when it gets closer, so short lists and their headings never move
     var f = box.querySelector(".srow.focus");
@@ -2568,8 +2825,27 @@
 
   // A short navigation click on every arrow and OK, like the TV's own launcher.
   var AC = null, SOUND = true;
+  // "Soft": a short, quiet, lower tap instead of the TV's click (#32, thanks alonmustafa)
+  function softTick() {
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      AC = AC || new Ctx();
+      if (AC.state === "suspended") AC.resume();
+      var now = AC.currentTime, o = AC.createOscillator(), g = AC.createGain();
+      o.type = "sine";
+      o.frequency.setValueAtTime(392, now);
+      o.frequency.exponentialRampToValueAtTime(294, now + 0.075);
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(0.05, now + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.095);
+      o.connect(g); g.connect(AC.destination);
+      o.start(now); o.stop(now + 0.1);
+    } catch (e) {}
+  }
   function blip(dx, dy) {
-    if (!SOUND) return;
+    if (!SOUND || SOUND_STYLE === "off") return;
+    if (SOUND_STYLE === "soft") { softTick(); return; }
     // On the TV: Android's own navigation sound (TVOS.tick), the one other TV launchers play.
     // It follows the TV's "system sounds" switch. 1 up, 2 down, 3 left, 4 right, 0 OK.
     if (TV && TV.tick) {
@@ -2608,7 +2884,7 @@
   // couch-tv has no system home behind it, so it opens couch-tv's own gear menu, like the gear tile.
   function isSettings(e) { return e.key === "Settings" || e.key === "TvSettings" || e.keyCode === 176; }
   function settingsKey() {
-    if (zone === "gear" || zone === "settings" || zone === "smart" || zone === "appmenu" || zone === "updask") { goHome(); return; }
+    if (zone === "gear" || zone === "settings" || zone === "smart" || zone === "appmenu" || zone === "updask" || zone === "inputs") { goHome(); return; }
     openGear();
   }
 
@@ -2696,6 +2972,17 @@
     }
   }
 
+  function sendWatchNext() {
+    if (!TV || !TV.watchNext) return Promise.resolve();
+    var rows = [];
+    try { rows = JSON.parse(TV.watchNext()) || []; } catch (e) {}
+    rows = rows.filter(function (r) { return r.package && r.title; }).map(function (r) {
+      return { package: r.package, title: r.title, episode_title: r.episode_title || null,
+        season: r.season || null, episode: r.episode || null, engaged: r.engaged || 0 };
+    });
+    return api("POST", "/api/watch-next", { rows: rows });
+  }
+
   function refresh() {
     // never reshuffle under something being moved, or under the settings screen
     if (lift || zone === "pmenu" || zone === "settings" || zone === "gear" || zone === "smart" || zone === "updask") return Promise.resolve();
@@ -2719,7 +3006,7 @@
     var jobs = [
       people.then(function () {
         return Promise.all(PEOPLE.map(function (p) {
-          return api("GET", "/api/continue?who=" + p.id, null, 9000).then(function (j) { data.showsBy[p.id] = (j.items || []).slice(0, 12); });
+          return api("GET", "/api/continue?who=" + p.id, null, 9000).then(function (j) { data.showsBy[p.id] = (j.items || []).slice(0, KEEP_MAX); });
         }));
       }),
       api("GET", "/api/screens").then(function (j) { data.screens = j.screens || []; }),
@@ -2731,7 +3018,10 @@
       // the order arranged on the phone (or with this TV's remote)
       NIGHT ? api("GET", "/api/app-order").then(bridgeOrder) : Promise.resolve(),
       // Home settings: the bridge keeps a copy, so the phone and this TV agree
-      syncSettings()
+      syncSettings(),
+      // Android's Watch Next rows: this app may read them, the bridge's ADB may not. They name a
+      // play an app gave no title for (Netflix sends none, Prime only its own name, issue #23).
+      sendWatchNext()
     ];
     return Promise.all(jobs.map(function (p) { return p.then(function () { return true; }, function () { return false; }); }))
       .then(function (ok) {
@@ -2765,7 +3055,7 @@
   window.tv = { back: goHome, home: function () { if (zone === "settings") closeSettings(); else goHome(); refresh(); },
     // the remote's Settings/gear key, caught by the launcher natively (MainActivity.dispatchKeyEvent)
     settingsKey: function () { blip(0, 0); settingsKey(); },
-    resume: function () { okReset(); refresh(); if (!OFFLINE) refreshQuick(); refreshWeather(); startVideo(); },
+    resume: function () { okReset(); refresh(); if (!OFFLINE) refreshQuick(); refreshWeather(); startVideo(); refreshMusic(); },
     // an app is in front: the video background stops until the home is back
     pause: pauseVideo,
     // the launcher's file picker has copied the chosen photos into its own storage (Home settings)
@@ -2813,10 +3103,15 @@
     }
     if (TV) data.apps = sortApps(nativeApps() || []);
     if (cached || TV) { render(); mark("home-painted-from-cache"); }
+    if (NIGHT) $("np-slot").appendChild($("np"));   // Now playing: the first card of the row
     renderQuick();
     if (!OFFLINE) refreshQuick();
-    // once the home is up: the one-time "tell you about new versions?" question
-    refresh().then(function () { mark("home-painted-live"); updTell(); updAsk(); });
+    refreshMusic();
+    setInterval(refreshMusic, 5000);
+    // This TV says who is on its couch first, so what plays here is logged for them (each TV
+    // keeps its own); then the lists. Once the home is up: the one-time "tell you about new versions?" question.
+    var hello = OFFLINE ? Promise.resolve() : api("POST", "/api/who", { who: who }).catch(function () {});
+    hello.then(refresh).then(function () { mark("home-painted-live"); updTell(); updAsk(); });
   }
 
   if (MOCK || PREVIEW) {

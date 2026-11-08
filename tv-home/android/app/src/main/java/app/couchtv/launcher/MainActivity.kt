@@ -10,6 +10,9 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.media.tv.TvContract
+import android.media.tv.TvInputInfo
+import android.media.tv.TvInputManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -73,8 +76,21 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CrashGuard.install(this)
+        // apply.sh starting the home on purpose (new settings) is always a fresh try.
+        if (intent?.hasExtra("bridge") == true || intent?.hasExtra("config_b64") == true) CrashGuard.reset(this)
+        // Crashed twice in the last few minutes: stand aside for the TV's own home rather than
+        // crash again, so the TV is never stuck going round (CrashGuard.kt). It tries again later.
+        if (CrashGuard.standingAside(this) && CrashGuard.openStockHome(this)) {
+            finish()
+            return
+        }
+        CrashGuard.started(this)
+        main.postDelayed({ CrashGuard.settled(this) }, CrashGuard.SETTLE_MS)
         // Lets a computer inspect the page over ADB (chrome://inspect). Only reachable with ADB access.
-        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
+        // Right after power on the TV's WebView can still be getting ready: never crash over it.
+        runCatching { WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG) }
+        CrashGuard.install(this)   // the WebView puts its own crash handler in front: ours goes first again
         root = FrameLayout(this).apply { setBackgroundColor(GROUND) }
         setContentView(root)
         hideSystemBars()
@@ -243,8 +259,18 @@ class MainActivity : Activity() {
 
     // ---------------------------------------------------------------- the page
 
+    /** The page's WebView, or null while the TV's WebView cannot start (then the app grid shows). */
+    private fun webView(): WebView? = web ?: try {
+        makeWebView().also { web = it; root.addView(it, 0, MATCH); CrashGuard.install(this) }
+    } catch (e: Throwable) {
+        android.util.Log.w("couchtv", "WebView not ready, showing the app grid: ${e.message}")
+        showFallback()
+        later(RETRY_MS)
+        null
+    }
+
     private fun showWeb(base: String) {
-        val w = web ?: makeWebView().also { web = it; root.addView(it, 0, MATCH) }
+        val w = webView() ?: return
         loadFailed = false
         offline = false
         pageReady = false
@@ -312,7 +338,9 @@ class MainActivity : Activity() {
                 val isIcon = u.pathSegments.firstOrNull() == "icon"
                 val img = (if (isIcon) iconImage(pkg) else bannerImage(pkg)) ?: return null
                 return WebResourceResponse(if (isIcon) "image/png" else "image/jpeg", null, ByteArrayInputStream(img)).apply {
-                    responseHeaders = mapOf("Cache-Control" to "max-age=86400")
+                    // CORS: the page cuts each icon's glyph out on a canvas for Glass app icons
+                    // (clearicon.js), and the page is served from another host
+                    responseHeaders = mapOf("Cache-Control" to "max-age=86400", "Access-Control-Allow-Origin" to "*")
                 }
             }
 
@@ -360,7 +388,7 @@ class MainActivity : Activity() {
      */
     private fun showOffline() {
         if (!hasOffline()) { showFallback(); return }
-        val w = web ?: makeWebView().also { web = it; root.addView(it, 0, MATCH) }
+        val w = webView() ?: return
         loadFailed = false
         offline = true
         val tv = prefs.getString("tv", null)
@@ -537,10 +565,69 @@ class MainActivity : Activity() {
         // The TV's own input list (HDMI and the rest), for the Input quick button when there is no
         // bridge to press the TV_INPUT key. Only where the TV has a screen for it.
         @JavascriptInterface
-        fun canOpenInputs(): Boolean = inputsIntent() != null
+        fun canOpenInputs(): Boolean = inputsIntent() != null || passthroughInputs().isNotEmpty()
 
         @JavascriptInterface
         fun openInputs(): Boolean = inputsIntent()?.let { start(it) } ?: false
+
+        /**
+         * The TV's own inputs for couch-tv's Input menu (#30): every HDMI port and other passthrough
+         * input Android lists, with the TV's own name for it (a renamed port, or "HDMI 3 (eARC)" where
+         * the maker labels it so) and, behind it, the devices HDMI-CEC found (a console's name). Android
+         * has no public way to read ARC or eARC, so that shows only where the TV's own label says it.
+         * JSON: [{id, label, type, devices: [..]}]. An empty list means the TV lists none.
+         */
+        @JavascriptInterface
+        fun tvInputs(): String {
+            val out = JSONArray()
+            val all = passthroughInputs()
+            val ports = all.filter { it.parentId == null }
+            for (p in ports) {
+                val devices = JSONArray()
+                all.filter { it.parentId == p.id }.forEach { c -> inputLabel(c)?.let { devices.put(it) } }
+                out.put(JSONObject().apply {
+                    put("id", p.id)
+                    put("label", inputLabel(p) ?: "")
+                    put("type", when (p.type) {
+                        TvInputInfo.TYPE_HDMI -> "hdmi"
+                        TvInputInfo.TYPE_COMPONENT -> "component"
+                        TvInputInfo.TYPE_COMPOSITE -> "composite"
+                        TvInputInfo.TYPE_DISPLAY_PORT -> "displayport"
+                        TvInputInfo.TYPE_VGA -> "vga"
+                        TvInputInfo.TYPE_SVIDEO -> "svideo"
+                        TvInputInfo.TYPE_SCART -> "scart"
+                        TvInputInfo.TYPE_DVI -> "dvi"
+                        else -> "other"
+                    })
+                    put("devices", devices)
+                })
+            }
+            return out.toString()
+        }
+
+        /**
+         * Switch the TV to one input: Android's passthrough channel for it, which the TV's own input
+         * app plays. If nothing on this TV takes that, its input list screen instead (false: neither).
+         */
+        @JavascriptInterface
+        fun openInput(id: String): Boolean {
+            if (id.isBlank()) return false
+            val view = Intent(Intent.ACTION_VIEW, TvContract.buildChannelUriForPassthroughInput(id))
+            if (packageManager.resolveActivity(view, 0) != null) return start(view)
+            return inputsIntent()?.let { start(it) } ?: false
+        }
+
+        /** The TV's Bluetooth or network settings, for the Input menu (falls back to all Settings). */
+        @JavascriptInterface
+        fun openSettingsScreen(which: String): Boolean {
+            val actions = when (which) {
+                "bluetooth" -> listOf(Settings.ACTION_BLUETOOTH_SETTINGS)
+                "network" -> listOf(Settings.ACTION_WIFI_SETTINGS, Settings.ACTION_WIRELESS_SETTINGS)
+                else -> emptyList()
+            } + Settings.ACTION_SETTINGS
+            val i = actions.asSequence().map { Intent(it) }.firstOrNull { packageManager.resolveActivity(it, 0) != null }
+            return i?.let { start(it) } ?: false
+        }
 
         // The saved copy has its own web storage, so the page keeps what it needs offline here.
         @JavascriptInterface
@@ -655,6 +742,21 @@ class MainActivity : Activity() {
         .map { Intent(it) }
         .firstOrNull { packageManager.resolveActivity(it, 0) != null }
 
+    /** HDMI and the other passthrough inputs Android lists, minus any the TV's owner hid. */
+    private fun passthroughInputs(): List<TvInputInfo> = try {
+        val tim = getSystemService(TV_INPUT_SERVICE) as? TvInputManager
+        tim?.tvInputList.orEmpty().filter { it.isPassthroughInput && !it.isHidden(this) }
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    /** The name the TV gives an input: the one its owner set, else the TV's own. */
+    private fun inputLabel(i: TvInputInfo): String? = try {
+        (i.loadCustomLabel(this) ?: i.loadLabel(this))?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+    } catch (e: Exception) {
+        null
+    }
+
     @Volatile private var appCache: List<Pair<ResolveInfo, String>>? = null
 
     /** The TV's apps with their labels. Cached: reading labels for 30 apps is slow on this TV. */
@@ -737,6 +839,10 @@ class MainActivity : Activity() {
                             art.toByteArray(), android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING))
                         if (dur > 0 && pos > 0) put("progress", (pos.toDouble() / dur).coerceIn(0.0, 1.0))
                         put("app", JSONObject().put("package", pkg).put("name", label))
+                        // for the bridge (POST /api/watch-next): which app, and when it was last watched,
+                        // to name a play the app itself gave no title for (Netflix, issue #23)
+                        put("package", pkg)
+                        put("engaged", c.getLong(10))
                     })
                 }
             }

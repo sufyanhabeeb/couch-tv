@@ -12,7 +12,12 @@
 //   myscenes=[...]      home.my_scenes, as JSON (docs/MAKE-A-SCENE.md), for your own scenes
 //   lang=it             home.language (en, es, es-MX, it, de, tr); without it, the browser's own language
 //   glass=on            home.glass (on, lite: no blur)      video=<link>   home.video_url, an MP4 or MOV
-//   icons=glass         home.glass_icons: the app icons in grey on frosted glass
+//   icons=glass         home.glass_icons: Apple style clear app icons on glass
+//   amount=1..5         home.glass_amount, how clear the glass is (1 frosted, 3 the default, 5 very clear)
+//   clockstyle=liquid   home.clock_style: the Night clock as liquid glass
+//   inputs=4            the Input button lists four HDMI ports (one eARC), as the launcher reads them
+//   gfocus=glass        home.glass_focus: with glass app icons, the focused app stays glass
+//   music=1             Now playing: a pretend song in Spotify (music=paused: paused; music=noart: no cover)
 //   newapp=1            an app turns up that this TV has not seen before (the New dot)
 //   down                the bridge is not answering      offline=1   the saved copy, no bridge at all
 //   reset=1             forget everything this preview saved (orders, people, the look, Home settings)
@@ -43,6 +48,14 @@
     });
   }
   if (arg("quick") !== null) cfg.tvs[0].quick = arg("quick").split(",").filter(Boolean);
+  if (arg("inputs")) {
+    window.MOCK_INPUTS = [
+      { id: "mock/hdmi1", label: "HDMI 1", type: "hdmi", devices: ["PlayStation 5"] },
+      { id: "mock/hdmi2", label: "HDMI 2", type: "hdmi", devices: [] },
+      { id: "mock/hdmi3", label: "HDMI 3 (eARC)", type: "hdmi", devices: ["Soundbar"] },
+      { id: "mock/hdmi4", label: "HDMI 4", type: "hdmi", devices: ["Apple TV"] }
+    ].slice(0, Math.max(1, Math.min(4, parseInt(arg("inputs"), 10) || 4)));
+  }
   if (arg("picture")) cfg.tvs[0].picture_modes = ["Calibrated", "Dynamic"];
   if (arg("look")) cfg.home.look = arg("look");
   if (arg("clock")) cfg.home.clock = arg("clock");
@@ -53,6 +66,9 @@
   if (arg("myscenes")) try { cfg.home.my_scenes = JSON.parse(arg("myscenes")); } catch (e) {}
   if (arg("glass")) cfg.home.glass = arg("glass");
   if (arg("icons") === "glass") cfg.home.glass_icons = true;
+  if (arg("gfocus")) cfg.home.glass_focus = arg("gfocus");   // glass: the focused app stays glass (#32)
+  if (arg("amount")) cfg.home.glass_amount = parseInt(arg("amount"), 10);
+  if (arg("clockstyle")) cfg.home.clock_style = arg("clockstyle");
   if (arg("video")) cfg.home.video_url = arg("video");
   window.COUCH_CONFIG = cfg;
 
@@ -166,16 +182,41 @@
 
   var sleepEnds = /[?&]sleep\b/.test(q) ? new Date(Date.now() + 42 * 60000).toISOString() : null;
   var picture = "calibrated";
+  // pretend songs for ?music= (made up, with the scenes as covers)
+  var SONGS = [["Golden Hour Drive", "The Weekend Shifts", "scene-golden"], ["Low Tide", "Saltwater Radio", "scene-water"],
+               ["Fog Lights", "Northern Rivers Club", "scene-fog"]];
+  var songAt = 0, songPlaying = arg("music") !== "paused";
+  function mockSong() {
+    var x = SONGS[songAt];
+    return { title: x[0], artist: x[1], album: null, state: songPlaying ? "playing" : "paused",
+             app: { id: "spotify", name: "Spotify", package: "com.spotify.tv.android" },
+             art: arg("music") === "noart" ? null : "backgrounds/" + x[2] + ".jpg" };
+  }
   window.MOCK_API = function (method, path, body) {
     var empty = /[?&]empty\b/.test(q), down = /[?&]down\b/.test(q);
     return new Promise(function (resolve, reject) {
       setTimeout(function () {
         if (down) return reject(new Error("The computer isn't answering."));
+        // Now playing (#31): ?music=1, a song that previous and next step through, play and pause toggle
+        if (path.indexOf("/api/music") === 0) return resolve({ ok: true, music: arg("music") ? mockSong() : null });
+        if (path.indexOf("/api/key") === 0) {
+          var k = body && body.key;
+          if (k === "play_pause") songPlaying = !songPlaying;
+          if (k === "next") songAt = (songAt + 1) % SONGS.length;
+          if (k === "previous") songAt = (songAt + SONGS.length - 1) % SONGS.length;
+          return resolve({ ok: true, key: k });
+        }
         if (path.indexOf("/api/continue/open") === 0) return resolve({ ok: true, note: "" });
         if (path.indexOf("/api/continue") === 0) {
           var w = (path.match(/who=([^&]+)/) || [])[1];
           var ids = people().map(function (p) { return p.id; }), at = ids.indexOf(w), count = Math.max(1, ids.length);
           var mine = empty ? [] : shows.filter(function (x, i) { return w === "both" || at < 0 || i % count === at || count > shows.length; });
+          // ?keep=11: that many shows for everyone (made-up titles over the four pictures), to see the row slide
+          var keepN = parseInt((q.match(/[?&]keep=(\d+)/) || [])[1], 10);
+          if (keepN) mine = Array.apply(null, Array(keepN)).map(function (_, i) {
+            var b = shows[i % shows.length];
+            return { id: "k" + i, title: "Show " + (i + 1), season: 1, episode: i + 1, app: b.app, backdrop: b.backdrop };
+          });
           return resolve({ ok: true, items: mine });
         }
         if (path.indexOf("/api/people") === 0) {

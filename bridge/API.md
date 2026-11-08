@@ -36,8 +36,9 @@ The bridge can run more than one TV. Every endpoint takes an optional TV id:
 - Leave it out and you get the default TV (`default_tv` in `config.json`). Nothing changes for clients
   that never send it.
 - TV ids are the `id` values in the `tvs` list in `config.json`. A TV that is not paired gives `503` "not paired yet".
-- `/api/events?tv=<id>` streams that TV. `who`, watch history, keep watching and picks are
-  shared by the household, not per TV; `playing`, `sleep` and `power` are per TV.
+- `/api/events?tv=<id>` streams that TV. `who` (the person on that TV's couch), keep watching,
+  `playing`, `sleep` and `power` are per TV; the watch history file and the picks are shared by
+  the household.
 
 ### `GET /api/tvs`
 ```json
@@ -120,12 +121,24 @@ Who is on the couch right now. The TV home and the phone send it when someone sw
 ```json
 {"ok": true, "who": "person2"}
 ```
-- It is also in `/api/now` and the events stream as `who` (`null` until someone sets it).
+- Each TV keeps its own (`?tv=` or `"tv"` in the body); the TV home sends its person when it
+  starts. It is also in `/api/now` and the events stream as `who` (`null` until someone sets it).
 - It is used whenever a request has no `who` of its own: `/api/play`, `/api/ask`,
   `/api/continue/open`, and shows started by hand on the TV (logged from the app's own
-  "now playing"). So once a person is set, what they start lands in their keep watching.
-- `both` still means everyone: `GET /api/continue?who=both` shows everything.
-- Plays logged before this existed, or with nobody set, count as shared (they show for both).
+  "now playing"). So once a person is set, what they start on that TV lands in their keep watching.
+- `both` is the household with no people set up: its own row, like a person.
+
+### `POST /api/watch-next`
+The TV home app's copy of Android's Watch Next rows ("Continue watching"), sent each time the home
+refreshes. The launcher holds READ_TV_LISTINGS (`apply.sh` grants it); ADB's shell user cannot read
+other apps' rows. When an app plays for a minute with no title of its own (Netflix sends none on
+some TVs, Prime only "PrimeVideo"), the newest row for that app written after the play started names
+it in Keep watching, for the person picked when it played, up to 3 hours later.
+```json
+{"tv": "living-room", "rows": [{"package": "com.netflix.ninja", "title": "The Night Agent",
+  "episode_title": "Pilot", "season": "1", "episode": "1", "engaged": 1794100000000}]}
+```
+`engaged` is the row's last engagement time in milliseconds. Answers `{"ok": true, "rows": 1}`.
 
 ### `GET /api/people` and `POST /api/people`
 The people (profiles), in the order the TV and the phone show them. Any number, up to 12, and none
@@ -334,13 +347,25 @@ Claude's picks plus continue watching. Optional `?who=person1`. Fast: it returns
 `picks` can be empty on day one (no watch history yet). Play a pick with `POST /api/play` and its
 `title` (and `service` if you have it).
 
+### `GET /api/music`
+Now playing (#31): the song any app on that TV (`?tv=`) is playing, from its media sessions, for the
+home's card. A song stays for ten minutes after a pause. `art` is the cover from Apple's free iTunes
+search, or `null` until it is found. `music` is `null` when nothing is playing. The card's buttons
+are `POST /api/key` with `previous`, `play_pause` and `next`.
+```json
+{"ok": true, "music": {"title": "Golden Hour", "artist": "JVKE", "album": "this is what ____ feels like",
+ "state": "playing", "app": {"id": "spotify", "name": "Spotify", "package": "com.spotify.tv.android"},
+ "art": "https://is1-ssl.mzstatic.com/.../600x600bb.jpg"}}
+```
+
 ### `GET /api/continue`
-"Keep watching": the shows to carry on with, newest first. Optional `?who=`.
+"Keep watching" for one TV (`?tv=`) and one person (`?who=`, else the person on that TV's couch):
+one card per show (its latest episode), newest first, at most 10, nothing older than 30 days.
 ```json
 {
   "ok": true,
   "items": [
-    {"id": "h-0", "title": "Bluey", "episode_title": "Hammerbarn", "season": 3, "episode": 4,
+    {"id": "3f2a9c1e0b7d4a55", "title": "Bluey", "episode_title": "Hammerbarn", "season": 3, "episode": 4,
      "app": {"id": "abc-iview", "name": "ABC iview", "package": "au.net.abc.iview"},
      "service": "abc-iview", "poster": "https://...jpg", "backdrop": "https://...jpg",
      "progress": null, "kind": "continue", "last_played": "2030-01-01T19:31:00Z",
@@ -350,11 +375,15 @@ Claude's picks plus continue watching. Optional `?who=person1`. Fast: it returns
 ```
 - Built from the bridge's own history: everything played through `/api/play`, plus what any app
   reported as playing when started by hand (see `playing` above). So it covers every app that
-  reports its title, not only the ones we opened.
+  reports its title, not only the ones we opened. A title counts after a minute of the same title
+  playing (and the app's own position past a minute), so autoplay previews stay out; a title that
+  is only the app's own name ("PrimeVideo") never counts. History from before 0.9 has no TV and no
+  person on it and is not listed; imported history feeds the picks, not this row.
 - Android's own Watch Next list (what Google's home shows) is not readable on this TV: it needs a
   system permission that ADB does not have. If that ever changes, those rows appear here with
   `"source": "tv"` and a real `progress` (0 to 1). Until then `progress` is `null`.
-- Resume with `POST /api/continue/open {"id": "h-0"}`. It reopens the show in its app; the app
+- Resume with `POST /api/continue/open {"id": "3f2a9c1e0b7d4a55"}`. The id is the history line's
+  own, so it always opens that card's show (and season and episode). It reopens the show in its app; the app
   itself picks up where you left off (Netflix, Stan, iview and the rest remember the position).
   Response is the same as `POST /api/play`.
 
@@ -448,6 +477,11 @@ is optional:
 | `look` | `night` or `classic`. |
 | `glass` | Glass panels: `off`, `on` or `lite` (no blur). |
 | `glass_icons` | Glass app icons: `true` or `false`. |
+| `glass_amount` | How clear the glass is: `1` (frosted) to `5` (very clear). |
+| `clock_style` | The Night clock: `frosted` or `liquid`. |
+| `glass_focus` | Glass app icons, the focused app: `colour` or `glass`. |
+| `now_playing` | The Now playing card: `true` or `false`. |
+| `nav_sound` | The navigation sound: `system`, `soft` or `off`. |
 | `video`, `video_url` | The video background on or off, and its link (`http://` or `https://`, an MP4 or MOV). `""` means the link was removed on the TV, and then wins over `home.video_url`. |
 | `scene_order`, `scenes_off` | Every scene in order, and the ones switched off. Ids are the five scene names and `p-<id>` for a photo. |
 | `scene_seconds`, `clock` | 5 to 3600; `12h` or `24h`. |
@@ -617,7 +651,9 @@ off it tries again hourly.
 | default TV | `bridge/data/keep-disabled.json` |
 | any other TV | `bridge/data/keep-disabled.<tv id>.json` |
 
-`tv-home/tools/apply.sh` writes the list for the TV it sets up.
+`tv-home/tools/apply.sh` writes the list for the TV it sets up (ambient mode and any ad tracker).
+The guard never switches off the TV's own home screens or the setup wizard, even if an old list
+names them: with those off, some Google TVs loop at power on.
 
 A JSON array of package names. Undo for a TV: empty that TV's list first, then re-enable the
 apps (otherwise the guard switches them off again the next day). Each undo script empties only

@@ -19,7 +19,7 @@ by the author. Everything else is what the sources say, not tested.
 | Fire TV on Fire OS 6, 7 and 8 (Stick 4K 1st and 2nd gen, Stick 4K Max, Cube) | Partial | Partial | Partial (home screen confirmed on a Stick 4K 2nd gen by a user; phone remote keys blocked on current Fire OS) |
 | Fire TV on Vega OS (Stick 4K Select, Stick HD 2026, 4K gen 3) | No | No | No |
 | Samsung (Tizen) | App only | As an app the bridge opens on power-on, not a home screen ([SAMSUNG.md](SAMSUNG.md)) | No |
-| LG (webOS) | Home screen: root only, fragile. As an app: while Developer Mode lasts ([LG.md](LG.md)) | As an app the bridge opens on power-on, like Samsung. Built, and run on one real LG so far ([LG.md](LG.md)) | No |
+| LG (webOS) | Home screen: root only, fragile. As an app: while Developer Mode lasts ([LG.md](LG.md)) | As an app the bridge opens on power-on, like Samsung. Built, and run on two real LGs so far ([LG.md](LG.md)) | No |
 | Roku, Apple TV, Hisense VIDAA | No | No | No |
 
 ## Reported by people using it
@@ -34,14 +34,15 @@ Not tested by the author. Each line is what someone said worked on their own dev
 ## Notes
 
 - **Google TV, home screen.** Install the new home first, then switch the Google one off with
-  `pm disable-user`. Package names differ by device. On some devices the setup app
-  (`setupwraith`) switches the Google home back on and has to be switched off too. Some Google Home
+  `pm disable-user`. Package names differ by device. Do not: on some Google TVs (a Sony Bravia
+  among them) the TV loops at every restart once the Google home and the setup app (`setupwraith`)
+  are off. couch-tv leaves both on and uses a Home button watch instead. Some Google Home
   features and the YouTube button can stop working. `tv-home/tools/survey-tv.py` shows what your
   TV has before anything changes.
-- **Other makers' home screens.** `apply.sh` only switches off Google's own homes (and the setup
-  wizard and ambient mode). A maker's own home that `survey-tv.py` lists is left alone: the TV's
-  default home is set to couch-tv with `cmd package set-home-activity` instead, and `undo.sh`
-  puts back whichever home the TV had before.
+- **Other makers' home screens.** `apply.sh` switches off no home screen at all, Google's or a
+  maker's. The TV's default home is set to couch-tv with `cmd package set-home-activity`, the Home
+  button watch covers TVs where the TV's own home still wins, and `undo.sh` puts back whichever
+  home the TV had before.
 - **Where the settings are.** Google TV: Settings, System, About (and Developer options under
   System). Android TV 9 to 11: Settings, Device Preferences, About (and Developer options under
   Device Preferences).

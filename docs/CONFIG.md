@@ -53,7 +53,7 @@ The round buttons at the top right of the home. Any of these, in the order you l
 | `sleep` | Sleep timer: 15, 30, 60 or 90 minutes, then the TV turns off. | The bridge |
 | `picture` | Flips between the TV's two picture modes in `picture.modes`. | The bridge, ADB, and a `picture` entry |
 | `look` | Flips the home between the Night scenes and the Classic look. This TV remembers the choice. | Nothing |
-| `input` | Opens the TV's input list (HDMI, a games console, a set top box). With the bridge it presses the TV's Input key (`KEYCODE_TV_INPUT`); with no bridge the launcher opens the TV's own input screen if it has one. | The bridge, or a TV with an input screen |
+| `input` | couch-tv's own Input menu: the HDMI ports and other inputs Android lists for the TV, by the TV's own names (ARC or eARC shows where the TV's label says so; Android has no public way to read it), with the devices HDMI-CEC found behind each, then Bluetooth and Network. OK switches straight to that input. A TV that lists no inputs keeps today's behaviour: with the bridge it presses the TV's Input key (`KEYCODE_TV_INPUT`); with no bridge the launcher opens the TV's own input screen if it has one. | The TV home launcher, the bridge, or a TV with an input screen |
 
 A button that cannot work right now is left out, the same way the sleep timer always disappeared
 when the computer was off. With no bridge at all (option A), only `look` shows, plus `input` on
@@ -116,9 +116,17 @@ out the same way. The phone's People sheet keeps these marks when it renames or 
 { "id": "visitor", "name": "Visitor", "guest": true }
 ```
 
-- **None or one person:** no switcher. Keep watching shows everything.
+- **None or one person:** no switcher. Keep watching shows everything watched on that TV.
+- **Keep watching is per TV and per person.** Each TV remembers who is on its couch, and each
+  person sees only what they watched on that TV: one card per show, newest first, up to 10, gone
+  after 30 days with no watching. A show counts after a minute of the same title playing. An app
+  that gives Android no title (Netflix on some TVs) or only its own name (Prime on a Sony) is named
+  from its row in Android's "Continue watching" (Watch Next) instead: the TV home app reads those
+  rows and hands them to the bridge, because ADB cannot read them. Videos and music are never kept.
 - **Two:** the pill switch at the top left.
 - **Three or more:** a round head icon with the person's initial. OK opens the list.
+- With two or more people the switcher always shows, also before anyone has watched anything, so
+  you can say who is watching first.
 
 The list order is the order on screen. After the first start the bridge keeps the list in
 `bridge/data/people.json`, and that wins over `config.json` from then on, because the phone
@@ -154,7 +162,12 @@ Home settings saves to the same `bridge/data/people.json` the phone uses.
 | `hide_packages` [none] | Android package names never shown on the home or in More apps, for a maker's own clutter (help apps, file browsers, screen sharing tools). `survey-tv.py` lists every TV app with its package name. For example `["com.example.tvhelp"]`. |
 | `updates` [none: the TV asks once] | The answer to "tell you when a new couch-tv version is out?", asked at setup: `notify` (the TV home looks on GitHub once a week and puts a dot on the gear tile) or `manual` (nothing by itself; Home settings, Updates, Check for updates now). Used only until the TV has an answer; after that the switch in Home settings, Updates wins. Option C has no updates. |
 | `glass` [`off`] | Glass panels behind the clock, Keep watching and the apps: `on` (clear, softly blurred, with a light edge), `lite` (the same panels with no blur, for older or slower TVs) or `off`. Home settings, Look, Glass panels wins over it. |
-| `glass_icons` [`false`] | `true`: the app icons turn grey and half see-through on frosted glass tiles, after Apple's clear icons, and the app you are on shows its own colours. Works with `glass` on or off, and the phone remote's app grid follows it. Home settings, Look, Glass app icons wins over it. |
+| `glass_icons` [`false`] | `true`: Apple style clear app icons. Each app's symbol is cut from its own background and drawn in light glass on a glass tile, and the app you are on shows its own colours. An icon that will not cut cleanly (a photo) is shown grey and half see-through instead. Works with `glass` on or off, and the phone remote's app grid follows it. Home settings, Look, Glass app icons wins over it. |
+| `glass_amount` [`3`] | How clear the glass is, `1` (frosted) to `5` (very clear): the glass panels, the glass app icons and both clocks (the frosted clock only gets more see-through at `4` and `5`). Home settings, Look, How clear wins over it, and the phone remote follows it. |
+| `glass_focus` [`colour`] | With glass app icons: the focused app shows its own colours (`colour`) or stays glass like the rest (`glass`), shown by its lift, a brighter rim and a deeper shadow. Home settings, Look, Focused app wins over it, and the phone remote follows it. |
+| `now_playing` [`true`] | Now playing: a card with the song any music app is playing, and previous, play or pause and next. `false` hides it. Needs option B or C. Home settings, Look, Now playing wins over it. |
+| `nav_sound` [`system`] | The sound on every arrow and OK: `system` (the TV's own, which follows its system sounds switch), `soft` (a short, quiet tap) or `off`. Home settings, Look, Sound wins over it. |
+| `clock_style` [`frosted`] | The Night look's clock: `frosted` (the photo's frosted copy, as before) or `liquid` (clear glass digits that bend the photo behind them a little, with a bright rim and a soft edge). Home settings, Look, Clock style wins over it. |
 | `video_url` [none] | A looping, muted video background in place of the photo, in both looks: the address of an MP4 or MOV (`https://...`, or `http://` for a computer at home). Given here it is on; Home settings, Look switches it off or changes the link. The photo stays if the clip does not play. |
 | `dock_size` [10] | How many apps sit in the Night dock before Settings and More apps. 1 to 10. Everything else is behind More apps. The phone's Arrange apps keeps to the same number. |
 | `language` [the TV's own language if the home speaks it, else `en`] | The TV home's language until someone picks one in Home settings: `en` (English), `es` (Spanish), `es-MX` (Mexican Spanish), `it` (Italian), `de` (German) or `tr` (Turkish). The phone remote has its own choice, "Same as the TV" by default. |

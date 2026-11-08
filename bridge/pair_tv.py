@@ -36,6 +36,9 @@ from androidtvremote2 import AndroidTVRemote
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 import config
+# A fresh copy has no bridge/data/ yet, and writing the certificate there failed with
+# FileNotFoundError (issue #23). Private to this user: it holds the pairing key.
+os.makedirs(config.DATA, mode=0o700, exist_ok=True)
 CERT, KEY = os.path.join(config.DATA, "cert.pem"), os.path.join(config.DATA, "key.pem")
 WAIT_S = 600
 
@@ -119,6 +122,7 @@ def give_code(cfg, code):
 async def pair(cfg):
     code_file, waiting, result = files(cfg["id"])
     host = resolve(cfg)
+    os.makedirs(config.DATA, exist_ok=True)  # a fresh clone has no bridge/data yet
     remote = AndroidTVRemote(config.CLIENT_NAME, CERT, KEY, host)
     await remote.async_generate_cert_if_missing()
     name, mac = await remote.async_get_name_and_mac()

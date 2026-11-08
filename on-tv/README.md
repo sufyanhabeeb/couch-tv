@@ -106,15 +106,18 @@ the TV, or on the setup page, signs every phone out.
 ## Use it as the home screen (optional)
 
 Switch on **Use as home screen** in Couch TV. On a plain Android TV that is enough. On Google TV the
-system launcher always wins the home button, so it also has to be switched off, from a computer:
+system launcher still wins the Home button, and **do not switch it off**: on some Google TVs (a
+Sony Bravia among them) the TV then loops at every restart
+([README](../README.md#if-your-tv-loops-after-a-restart)). Open Couch TV from the app row instead,
+or use option A's `apply.sh`, which takes the Home button with a watch and leaves the Google home on.
+If an older guide had you switch it off, switch it back on before the next restart:
 
 ```
-adb shell pm disable-user --user 0 com.google.android.apps.tv.launcherx   # Chromecast with Google TV and most Google TVs
-adb shell pm enable com.google.android.apps.tv.launcherx                  # undo
+adb shell pm enable com.google.android.apps.tv.launcherx
+adb shell pm enable com.google.android.tungsten.setupwraith
 ```
 
-Check the package name on your TV first (`adb shell pm list packages | grep launcher`). Some Google
-Home features stop working while it is off. The app never does this by itself.
+The app never switches anything off by itself.
 
 ### Fire TV (Fire OS)
 
@@ -182,28 +185,39 @@ address.
 
 - it was started from the phone (search, Ask, or a Keep watching tile), or
 - an app says it is playing it for a minute or more, however it was started (the TV remote, the
-  phone's arrow keys, the app's own menus). This needs ADB connected, because the TV reads it from
-  Android's media sessions, the same reading as "What is playing". Netflix, Disney+, Prime Video
-  and most others say what is playing; a few apps say nothing, and those cannot land there.
+  phone's arrow keys, the app's own menus). The same title has to play for the whole minute, and
+  the app's own position has to pass a minute too, so a preview that autoplays on an app's browse
+  screen never counts. This needs ADB connected, because the TV reads it from Android's media
+  sessions, the same reading as "What is playing". Netflix, Disney+, Prime Video and most others
+  say what is playing. Some say nothing (Netflix on some boxes) or only their own name ("PrimeVideo"
+  while a film plays, seen on a Sony): that is never kept as a show by itself. Instead the app reads
+  that app's row in Android's "Continue watching" (Watch Next), which Netflix and Prime keep up to
+  date, usually as you leave the show, and names the play from it, for the person picked when it
+  played. The app gives itself the permission to read those rows over its own ADB when it
+  connects. An app that says nothing and keeps no such row still cannot land there.
 
-Only titles the show finder knows go in (it found the show's artwork), so every tile can open the
-show again. The finder looks in the country on the setup page; left empty, that is the TV's own
-region when the TV is not in English (a German TV in Germany looks in DE), else AU. If the row stays
-empty for shows you know are playing, check that country first. YouTube videos and music stay out: YouTube keeps its own history. There is no progress
-bar and no imported history; those need the computer bridge (option B). Until this change, only
-shows started from the phone landed there, so the row stayed empty for anyone without Ask on.
+Each card opens exactly the show it shows. One card per show (the latest episode), newest first,
+**up to 10**: the row slides along as you move right. A show drops off after **30 days** with no
+watching. The finder looks in the country on the setup page for the show's picture; left empty,
+that is the TV's own region when the TV is not in English (a German TV in Germany looks in DE),
+else AU. A title it cannot match exactly still goes in, with no picture, rather than another show's.
+YouTube videos, music and Twitch stay out. There is no progress bar and no imported history; those
+need the computer bridge (option B).
 
 **People** (the names at the top left, set on the setup page or in Home settings) decide whose
 Keep watching row the home shows. In on-TV mode, switching person:
 
-- shows that person's Keep watching row, plus anything nobody was watching as;
+- shows that person's Keep watching row, and only theirs: what they watched on this TV;
 - tags what starts playing next as theirs, from the TV and from the phone (the phone remote follows
-  the TV's choice, and the other way round);
+  the TV's choice, and the other way round). The TV remembers who it is on, also after a restart;
 - tells Ask who is watching, if Ask is on.
 
 It does not pick your profile inside Netflix or the other apps, and there are no picks per person;
 both need the computer bridge (`app_profiles` in [docs/CONFIG.md](../docs/CONFIG.md)). With one
-person or none, there is no switcher and Keep watching shows everything.
+person or none, there is no switcher and Keep watching shows everything watched on this TV.
+
+From 0.9 the row starts fresh: what was watched before then is not shown, because it does not say
+who watched it. It fills again as you watch.
 
 ## Power on
 

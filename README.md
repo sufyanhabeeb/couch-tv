@@ -3,9 +3,19 @@
 Your own home screen and phone remote for a Google TV, and now a Samsung TV, with an LG path
 built and waiting for its first real LG. No ads on the home screen. Open source (MIT).
 
+> Note for Google TV owners: 0.11 leaves the Google home and setup apps switched on. If you set
+> couch-tv up with 0.10 or older, see [If your TV loops after a restart](#if-your-tv-loops-after-a-restart).
+
 ![The Night home screen](docs/screens/home-night.jpg)
 
 ## Updates
+
+**8 November 2026: a restart could loop some Google TVs. Fixed.** A Sony Bravia Google TV owner
+found that after couch-tv went on, a restart left the TV going round: blank screen, restart, blank
+screen. couch-tv 0.10 and older switched off the Google TV home and the setup app, and on some
+Google TVs the TV cannot start without them. From 0.11 couch-tv never switches either off, the updated app switches them back on by itself where it can, and if couch-tv itself keeps crashing the TV's own home takes over. **If you set couch-tv up
+with 0.10 or older, read [If your TV loops after a restart](#if-your-tv-loops-after-a-restart)
+before you next restart your TV.** Sorry, and thank you to the person who reported it.
 
 **4 November 2026: Fire TV extras, from a fork.** Thirty four people have forked couch-tv now. From
 [killy10o10](https://github.com/killy10o10/couch-tv), who runs it on a Fire TV Stick 4K (2nd gen):
@@ -130,7 +140,8 @@ it, and the skyline in front of the clock if you like): [docs/MAKE-A-SCENE.md](d
 | ![Fog](docs/screens/home-fog.jpg) | ![Dawn](docs/screens/home-dawn.jpg) | ![Classic](docs/screens/home-classic.jpg) |
 
 Shown with sample shows and sample people. On your TV, "keep watching" fills from what you
-actually watch.
+actually watch: per TV and per person (with options B and C), up to 10 shows, newest first.
+With option A it is Android's own Watch Next list, the same for everyone on that TV.
 
 ## Settings on the TV
 
@@ -161,7 +172,10 @@ and then closes. What you change shows when the list closes.
   the order. The same order as holding OK on the dock and the phone's Arrange apps.
 - **People:** add, rename, remove and reorder who is watching.
 - **Quick buttons:** which of the sleep timer, picture mode, look and input buttons show, in what
-  order.
+  order. **Input** opens couch-tv's own menu where the TV lists its inputs: each HDMI port by the
+  TV's own name for it ("HDMI 3 (eARC)" where the TV labels it so) with what is plugged in behind it,
+  each one switching straight away, then Bluetooth and Network. A TV that lists no inputs gets its
+  own input screen, as before (#30).
 - **Updates:** off until you say yes. The first time the home opens it asks once: "Tell you when a
   new couch-tv version is out?" (setup can answer it for you, `home.updates`). With **Tell me about
   new versions** on, the TV looks on GitHub once a week, so frequent releases never nag; with it off
@@ -192,11 +206,22 @@ turns it off again without losing the link. The photo stays until the clip plays
 it will not play. The video stops while an app is in front. Over a video, the Night clock is
 frosted white instead of cut from the photo. Both are heavier than the plain home, so on a small
 TV stick switch them off if the home feels slow. Thanks alonmustafa (#22). **Glass app icons**
-(also under Look) turns the app icons grey on frosted glass, like Apple's clear icons, with the
-app you are on in its own colours (#25). The phone remote's app grid follows the TV's choice. Links straight to
+(also under Look) shows each app's symbol in light glass without its own background, like Apple's
+clear icons, and a logo that is itself a shape (YouTube) keeps the shape with its mark cut out (#25, #33). **Focused app** chooses whether the app you are on shows its own colours or stays glass like Apple's, shown by a lift and a brighter rim (#32). **How clear** sets the glass from
+frosted to very clear in five steps (#29), and **Clock style, Liquid glass** draws the Night clock
+as clear glass digits that bend the photo behind them (#25). The phone remote follows the TV. Links straight to
 Apple's own server (`sylvan.apple.com`, the tvOS aerials) never play: it uses a certificate from
 Apple's private authority, which Android and Chrome do not trust. Copies of the same aerials on
 other hosts, or saved on a computer at home, play fine as MOV (#27).
+
+**Now playing.** When Spotify or any other music app is playing behind the home, a card shows the
+song, the artist and its cover, with previous, play or pause and next (the remote's own media keys).
+In the Night look it is the first card of the Keep watching row; in Classic it sits under the quick
+buttons. A paused song stays for ten minutes. It needs option B or C: Android does not let an
+ordinary app see what other apps play, so option A has no card. Home settings, Look, Now playing
+switches it off. The cover comes from Apple's free music search. Thanks alonmustafa (#31).
+**Navigation sound** (Home settings, Look, Sound): the TV's own click, a soft tap, or none (#32).
+With Glass panels on, Home settings and the menus are glass too, and focus moves more calmly (#32, #33).
 
 **Smart home (optional).** If you already run Home Assistant, the home can show your air
 conditioning (each room's temperature, warmer, cooler, on, off and mode), your scenes and scripts
@@ -242,7 +267,7 @@ about how a show opened) and some screen reader labels on the phone are still in
 | **Fire TV on Fire OS** (Fire OS 6, 7 and 8: Fire TV Stick 4K 1st gen and newer, Stick 4K Max, Cube) | Partial. Takes the Home key back, but Amazon's home flashes up first | Partial | Yes, and it takes the Home key back ([how](on-tv/README.md#fire-tv-fire-os)) |
 | **Fire TV on Vega OS** (newer Fire TV sticks) | No | No | No |
 | **Samsung** (Tizen) | App only, opened from Samsung's app row | With a computer at home: yes, as an app that opens itself, not a true home screen ([how](docs/SAMSUNG.md)) | No |
-| **LG** (webOS) | App only, opened from LG's app row, while Developer Mode lasts | With a computer at home: as an app that opens itself, like the Samsung. Built, and run on one real LG so far ([how](docs/LG.md)) | No |
+| **LG** (webOS) | App only, opened from LG's app row, while Developer Mode lasts | With a computer at home: as an app that opens itself, like the Samsung. Built, and run on two real LGs so far ([how](docs/LG.md)) | No |
 | **Roku, Apple TV, Hisense with VIDAA** | No | No | No |
 
 **Hisense, Sharp and other brands that sell more than one kind of TV:** it depends on the model,
@@ -326,7 +351,8 @@ needs the first's TV set up the same way (developer mode on).
 - A computer on the same Wi-Fi to set it up from: macOS or Linux with **Python 3.11 or newer**
   (`python3 --version`). Missing or older: on macOS `brew install python@3.11` or the installer
   from python.org; on Linux your distribution's package (for example `sudo apt install python3.11
-  python3.11-venv`). On a Mac the first `python3` or `git` may ask to install the developer tools:
+  python3.11-venv`; Debian ships Python without the venv part, so if `python3 -m venv .venv` fails
+  install `python3-venv`, or use `uv venv --seed .venv`). On a Mac the first `python3` or `git` may ask to install the developer tools:
   say Install, it takes a few minutes. For option A that computer can go back in the cupboard
   afterwards.
 - The TV app, `couch-tv-home.apk`: **download it from the GitHub Releases page**, or build it
@@ -363,7 +389,8 @@ Do this on the TV itself.
 4. Find **USB debugging** and switch it on.
 5. If there is also a **Network debugging** switch (also called ADB over network or ADB
    debugging), switch it on too. Some TVs have no such switch: on a TCL with Android TV 11, USB
-   debugging alone opened the network port. Either way, check from the computer:
+   debugging alone opened the network port. The opposite happened on a 2015 Sony Bravia (Android
+   8.0): port 5555 only opened after **Network debugging** was switched on as well. Either way, check from the computer:
    `.venv/bin/python scripts/check-tv.py <tv address>`. If it says ADB is open on port 5555,
    everything in this repo works as it is. If it says only Wireless debugging is on, see the box
    below.
@@ -421,7 +448,8 @@ Edit `config.json` (it is private, it never gets committed):
 
 - `tvs`: put your TV's address in `ip`. Give it a name. Add more TVs by adding more entries.
 - `people`: the names that show on the "who is watching" switch, any number. None or one: no
-  switch. Two: a switch. Three or more: a round head icon that opens a list. Mark children with
+  switch. Two: a switch. Three or more: a round head icon that opens a list. It shows even before
+  anyone has watched anything. Mark children with
   `"kid": true` and visitors with `"guest": true` so they stay out of the household's picks.
 - `weather`: your latitude, longitude, place name and time zone (Open-Meteo, free, no key). A
   suburb or city, never a home address.
@@ -496,8 +524,7 @@ Get `couch-tv-home.apk` from the GitHub Releases page (or build it, below). Look
 TV_IP=<your tv address> .venv/bin/python tv-home/tools/survey-tv.py
 ```
 
-It also reminds you that switching the setup wizard off makes some TVs forget their Wi-Fi. Nothing
-can tell in advance which TVs, so plan for it on any TV: have the TV remote ready.
+It lists the TV's home screens and the packages `apply.sh` touches.
 
 Then install it. **Option A** (no computer stays on):
 
@@ -511,20 +538,18 @@ TV_IP=<your tv address> APK=couch-tv-home.apk sh tv-home/tools/apply.sh
 TV_IP=<your tv address> APK=couch-tv-home.apk BRIDGE_URL=http://my-computer.local:5400 sh tv-home/tools/apply.sh
 ```
 
-This installs the app, switches off the Google TV home (and ambient mode, the setup wizard and any
-ad trackers you name in `EXTRA_OFF`), and makes the new home the TV's home. Other makers' own home
-screens are left alone; the TV's default home is set to couch-tv instead. Nothing is deleted.
-It also hands the app your `config.json` settings (people, weather, clock, look, quick buttons)
-for its built-in copy. **Read the Undo section before you run it.**
+This installs the app and makes it the TV's home. The TV's own home screen (Google TV's or a
+maker's own) and the setup app stay installed and switched on, so the TV always has them when it starts: a small
+Home button watch puts couch-tv on top whenever the TV opens its own home, which may flash up for a
+moment first. Only ambient mode (the idle adverts) and any ad trackers you name in `EXTRA_OFF` are
+switched off, and `apply.sh` refuses to switch off anything the TV may need to start. Nothing is
+deleted. It also hands the app your `config.json` settings (people, weather, clock, look, quick
+buttons) for its built-in copy. **Read the Undo section before you run it.** It is safe to run as
+often as you like, and on a TV set up by couch-tv 0.10 or older it switches the Google TV home and
+the setup app back on ([why](#if-your-tv-loops-after-a-restart)).
 
-The setup wizard goes off last, after everything else is done. If the TV then forgets its Wi-Fi,
-`apply.sh` says so: join the Wi-Fi again at the TV (Settings, Network and Internet) and run the
-same command again. It is safe to run as often as you like.
-
-- `KEEP_SETUP=1` leaves the setup wizard on, so the Wi-Fi is never at risk. On some TVs the
-  wizard then keeps winning the Home button; if it does, the wizard has to go off.
-- **A Google TV update can switch the Google home back on.** With option B the bridge checks once
-  a day and switches it off again. With option A there is no bridge: run `apply.sh` again after an
+- **A Google TV update can switch ambient mode back on.** With option B the bridge checks once a
+  day and switches it off again. With option A there is no bridge: run `apply.sh` again after an
   update (and after you change `config.json`).
 
 **Option A with no computer** (reported by
@@ -546,8 +571,10 @@ Good to know:
 
 - Neither app is part of couch-tv and we have not checked them. TV Launcher Manager gets the same
   ADB access to your TV that a computer would.
-- It may not switch off everything `apply.sh` does (the Google home, ambient mode, the setup
-  wizard), and the app does not get your `config.json`. Change the look and the people in
+- It may switch off the Google TV home. If it does, switch **Google TV Home** and **Setup** back
+  on (Settings, Apps, See all apps, Show system apps, Enable) before you restart the TV: on some
+  Google TVs a restart without them loops ([why](#if-your-tv-loops-after-a-restart)). The app does
+  not get your `config.json`. Change the look and the people in
   [Settings on the TV](#settings-on-the-tv).
 - If a Google TV update brings the Google home back, run **Setup Launcher** again.
 - To undo, use the TV-remote steps in [Undo](#undo-put-the-google-home-screen-back).
@@ -587,6 +614,47 @@ own settings either way. Home settings, Updates offers the releases of `Seagey/c
 your own build cannot take (another key): a fork with releases of its own builds with
 `UPDATE_REPO=owner/name sh scripts/build-apk.sh`, and `UPDATE_REPO=` (empty) switches updates off.
 
+## If your TV loops after a restart
+
+**Sony Bravia and other Google TV owners: please read this.** couch-tv 0.10 and older switched off
+the Google TV home and the Google TV setup app (`setupwraith`) to make couch-tv the home screen. On
+some Google TVs, a Sony Bravia among them, that leaves the TV unable to start: after a restart it
+shows a blank screen, restarts by itself, and goes round again. Because it keeps restarting, it may
+not stay on the Wi-Fi long enough for a computer to reach it. Version 0.11 no longer switches
+either of them off (below), and running its `apply.sh` on a TV set up by an older one switches them
+back on.
+
+**If your TV is in the loop now:**
+
+1. Switch the TV off at the wall for 10 to 15 minutes, then on again. Have the computer ready.
+2. As soon as the TV answers a ping, switch the two back on, from the couch-tv folder:
+   ```sh
+   TV_IP=<your tv address> sh tv-home/tools/undo.sh
+   ```
+   If `undo.sh` cannot connect, keep trying these two lines with Google's `adb` while the TV is
+   up (each loop gives a short window):
+   ```sh
+   adb connect <your tv address>:5555
+   adb shell pm enable com.google.android.apps.tv.launcherx
+   adb shell pm enable com.google.android.tungsten.setupwraith
+   ```
+3. Once the TV starts normally, you can put couch-tv back with the new `apply.sh`, which leaves
+   both on.
+
+**Set up with 0.10 or older and not looping (yet)?** Run `undo.sh` (above) or the new `apply.sh`
+before you next restart the TV. Option B: update the bridge too, so its daily check never switches
+them off again. With only the TV remote: Settings, Apps, See all apps, Show system apps, then
+**Enable** on both **Google TV Home** and **Setup**.
+
+**How couch-tv stays safe now.** The TV's own home screen and setup app stay installed and on, so
+the TV always has a home to start with. couch-tv is set as the chosen home, and a small Home button
+watch puts couch-tv on top whenever the TV opens its own home (at power on, and from the Home key on
+Google TV). The TV's own home may flash up for a moment first. If couch-tv itself crashes twice in a
+few minutes, it stands aside and leaves the TV's own home on screen, and tries again a few minutes
+later, so a broken couch-tv cannot hold the TV in a loop either. Only ambient mode (the idle
+adverts) and any ad tracker you name are switched off, and `apply.sh` refuses to switch off anything
+the TV may need to start: a home screen, a setup app, a persistent system app or part of Android.
+
 ## Undo: put the Google home screen back
 
 The full guide, with the TV-remote-only way and what to do if something is stuck:
@@ -600,8 +668,8 @@ The full guide, with the TV-remote-only way and what to do if something is stuck
    the TV it says so, changes nothing and prints the TV-remote steps.
 
 Only the home screen, keeping the app (10 seconds): `TV_IP=<your tv address> sh tv-home/tools/undo.sh`.
-It switches back on exactly what `apply.sh` switched off, and makes the home the TV had before the
-home again. To remove the app as well, after that:
+It switches back on what `apply.sh` switched off (and the Google TV home and setup app, in case an
+older couch-tv switched them off), and makes the home the TV had before the home again. To remove the app as well, after that:
 `TV_IP=<your tv address> .venv/bin/python tv-home/tools/tvadb.py shell "pm uninstall app.couchtv.launcher"`.
 
 With only the TV remote (no computer):
@@ -609,8 +677,9 @@ With only the TV remote (no computer):
 1. On the couch-tv home, open the **Settings** tile (the gear at the end of the app row), or press
    the Settings button on your remote.
 2. **Apps**, then **See all apps**, then **Show system apps**.
-3. Open **Google TV Home** (it says Disabled) and press **Enable**. Do the same for **Setup** (the
-   Google TV setup app). Ambient mode and the ad tracker are optional.
+3. If **Google TV Home** or **Setup** (the Google TV setup app) says Disabled, open it and press
+   **Enable** (couch-tv 0.10 and older switched them off). Ambient mode and the ad tracker are
+   optional. Then open **Settings, Accessibility** and switch off **Home button watch**.
 4. Back in **Apps**, open **Home** (the new one) and press **Uninstall**.
 5. Press the Home button. Google TV is back.
 
@@ -618,8 +687,8 @@ Do step 3 before step 4. If the new home is removed while Google TV Home is stil
 no home screen. Apps still open from the remote's app buttons, and the computer undo above still
 works.
 
-If the TV ever loses its saved Wi-Fi after switching the setup wizard off, enable **Setup** again
-(step 3) and set the Wi-Fi from there.
+If the TV ever lost its saved Wi-Fi after an older couch-tv switched the setup app off, enable
+**Setup** again (step 3) and set the Wi-Fi from there.
 
 ## How it fits together
 
@@ -655,7 +724,7 @@ TV home (tv-home/)      --->  bridge (for shows and picks)               (Androi
 
 - Google TV and Android TV run everything. Fire TV (Fire OS) runs the on-TV app, with Amazon's
   home flashing up first. Samsung runs it as an app, with a computer that stays on, and LG the
-  same way (run on one real LG so far). Developer mode has to be on.
+  same way (run on two real LGs so far). Developer mode has to be on.
 - A Google TV update can switch the Google home back on. Option B's bridge checks once a day and
   switches it off again; with option A, run `apply.sh` again.
 - Some apps will not open a show directly. They open the app instead. See `bridge/DEEPLINKS.md`.
